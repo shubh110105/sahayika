@@ -1,4 +1,4 @@
-from flask import Blueprint
+from flask import Blueprint, render_template
 from app.database import fetch_one
 
 
@@ -15,3 +15,13 @@ def db_test():
         f"Database connected successfully. "
         f"Services: {result['service_count']}"
     )
+
+
+@main.route("/register")
+def register_page():
+    return render_template("register.html")
+
+
+@main.route("/login")
+def login_page():
+    return render_template("login.html")

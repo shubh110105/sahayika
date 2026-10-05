@@ -14,7 +14,7 @@ def get_db_connection():
 
 def fetch_one(query, params=None):
     connection = get_db_connection()
-    cursor = connection.cursor(dictionary=True)
+    cursor = connection.cursor(dictionary=True) #A cursor is used to send SQL commands to the database and get results back.
 
     try:
         cursor.execute(query, params or ())
