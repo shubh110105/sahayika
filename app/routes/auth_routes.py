@@ -88,3 +88,12 @@ def login():
         "user_id": user["user_id"],
         "role": user["role"]
     })
+
+@auth.route("/logout", methods=["POST"])
+def logout():
+    session.clear()
+
+    return jsonify({
+        "success": True,
+        "message": "Logged out successfully."
+    })
