@@ -1,4 +1,4 @@
-from flask import Flask  #Import the Flask class from the Flask package.
+"""from flask import Flask  #Import the Flask class from the Flask package.
 from app.config import Config
 from app.routes import main
 from app.routes.auth_routes import auth
@@ -12,5 +12,28 @@ def create_app():  #Create a function called create_app that will create our Fla
 
     app.register_blueprint(main)
     app.register_blueprint(auth)
+
+    return app
+"""
+from flask import Flask
+from app.config import Config
+from app.routes import main
+from app.routes.auth_routes import auth
+from app.routes.dashboard_routes import dashboard
+from app.routes.customer_routes import customer
+from app.routes.maid_routes import maid
+from app.routes.verification_routes import verification
+
+def create_app():
+    app = Flask(__name__)
+
+    app.config.from_object(Config)
+
+    app.register_blueprint(main)
+    app.register_blueprint(auth)
+    app.register_blueprint(dashboard)
+    app.register_blueprint(customer)
+    app.register_blueprint(maid)
+    app.register_blueprint(verification)
 
     return app
