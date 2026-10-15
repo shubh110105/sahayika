@@ -23,6 +23,7 @@ from app.routes.dashboard_routes import dashboard
 from app.routes.customer_routes import customer
 from app.routes.maid_routes import maid
 from app.routes.verification_routes import verification
+from app.routes.requirement_routes import requirement
 
 def create_app():
     app = Flask(__name__)
@@ -35,5 +36,6 @@ def create_app():
     app.register_blueprint(customer)
     app.register_blueprint(maid)
     app.register_blueprint(verification)
+    app.register_blueprint(requirement)
 
     return app

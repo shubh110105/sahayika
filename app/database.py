@@ -50,3 +50,28 @@ def execute_query(query, params=None):
     finally:
         cursor.close()
         connection.close()
+
+
+
+def execute_transaction(callback):
+    """
+    Run dependent database operations in one transaction.
+
+    The callback receives a cursor and can execute multiple
+    SQL statements using the same connection and transaction.
+    """
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    try:
+        result = callback(cursor)
+        connection.commit()
+        return result
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        cursor.close()
+        connection.close()
