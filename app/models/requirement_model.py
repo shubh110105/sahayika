@@ -95,6 +95,8 @@ def get_requirement_by_id(requirement_id, customer_id):
             experience_requirement,
             additional_requirements,
             status,
+            estimated_monthly_salary,
+            salary_estimated_at,
             created_at,
             updated_at
         FROM household_requirements
@@ -199,6 +201,138 @@ def create_requirement_with_details(
 
     return execute_transaction(operation)
 
+
+def get_all_services():
+    query = """
+        SELECT service_id, service_name
+        FROM services
+        ORDER BY service_name ASC
+    """
+    return fetch_all(query)
+
+
+def get_requirement_services(requirement_id):
+    query = """
+        SELECT s.service_id, s.service_name
+        FROM requirement_services rs
+        JOIN services s ON s.service_id = rs.service_id
+        WHERE rs.requirement_id = %s
+        ORDER BY s.service_name
+    """
+    return fetch_all(query, (requirement_id,))
+
+
+def get_requirement_schedules(requirement_id):
+    query = """
+        SELECT day_of_week, start_time, end_time
+        FROM requirement_schedules
+        WHERE requirement_id = %s
+        ORDER BY FIELD(
+            day_of_week,
+            'MONDAY', 'TUESDAY', 'WEDNESDAY',
+            'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'
+        ), start_time
+    """
+    return fetch_all(query, (requirement_id,))
+
+
+def get_service_pricing(service_ids):
+    if not service_ids:
+        return []
+
+    placeholders = ", ".join(["%s"] * len(service_ids))
+
+    query = f"""
+        SELECT
+            s.service_id,
+            s.service_name,
+            sp.base_monthly_rate,
+            sp.rate_per_extra_hour
+        FROM service_pricing sp
+        JOIN services s
+            ON s.service_id = sp.service_id
+        WHERE s.service_id IN ({placeholders})
+          AND sp.is_active = 'ACTIVE'
+        ORDER BY s.service_name
+    """
+
+    return fetch_all(query, tuple(service_ids))
+
+
+def save_requirement_salary_estimate(requirement_id, estimated_salary):
+    query = """
+        UPDATE household_requirements
+        SET
+            estimated_monthly_salary = %s,
+            salary_estimated_at = CURRENT_TIMESTAMP,
+            status = 'SALARY_ESTIMATED'
+        WHERE requirement_id = %s
+          AND status = 'DRAFT'
+    """
+
+    return execute_query(
+        query,
+        (estimated_salary, requirement_id)
+    )
+
+
+
+def request_salary_review(requirement_id, customer_id):
+    query = """
+        UPDATE household_requirements
+        SET status = 'SALARY_REVIEW_REQUESTED'
+        WHERE requirement_id = %s
+          AND customer_id = %s
+          AND status = 'SALARY_ESTIMATED'
+          AND estimated_monthly_salary IS NOT NULL
+    """
+
+    execute_query(query, (requirement_id, customer_id))
+
+    updated_requirement = fetch_one(
+        """
+        SELECT requirement_id
+        FROM household_requirements
+        WHERE requirement_id = %s
+          AND customer_id = %s
+          AND status = 'SALARY_REVIEW_REQUESTED'
+        """,
+        (requirement_id, customer_id)
+    )
+
+    return updated_requirement is not None
+
+
+def cancel_household_requirement(requirement_id, customer_id):
+    query = """
+        UPDATE household_requirements
+        SET status = 'CANCELLED'
+        WHERE requirement_id = %s
+          AND customer_id = %s
+          AND status IN (
+              'DRAFT',
+              'SALARY_ESTIMATED',
+              'SALARY_REVIEW_REQUESTED',
+              'SUBMITTED',
+              'UNDER_REVIEW',
+              'NO_MATCH_AVAILABLE'
+          )
+    """
+
+    execute_query(query, (requirement_id, customer_id))
+
+    cancelled_requirement = fetch_one(
+        """
+        SELECT requirement_id
+        FROM household_requirements
+        WHERE requirement_id = %s
+          AND customer_id = %s
+          AND status = 'CANCELLED'
+        """,
+        (requirement_id, customer_id)
+    )
+
+    return cancelled_requirement is not None
 
     # The first operation inserts the requirement.
     # Its generated ID will be used by the service layer
