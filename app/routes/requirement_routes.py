@@ -15,6 +15,7 @@ from app.models.requirement_model import (
     get_requirement_schedules,
     request_salary_review,
     cancel_household_requirement,
+    submit_requirement_for_matching,
 )
 
 
@@ -232,4 +233,41 @@ def cancel_requirement(requirement_id):
         return jsonify({
             "success": False,
             "message": "Unable to cancel the requirement."
+        }), 500
+
+
+
+@requirement.route(
+    "/<int:requirement_id>/submit",
+    methods=["POST"]
+)
+@role_required("CUSTOMER")
+def submit_requirement(requirement_id):
+    """Let the owning customer accept the estimate and submit the requirement."""
+    customer_id = session["user_id"]
+
+    try:
+        submitted = submit_requirement_for_matching(
+            requirement_id,
+            customer_id
+        )
+
+        if not submitted:
+            return jsonify({
+                "success": False,
+                "message": (
+                    "This requirement cannot be submitted. Confirm that it belongs "
+                    "to you, has a saved salary estimate, and is still SALARY_ESTIMATED."
+                )
+            }), 400
+
+        return jsonify({
+            "success": True,
+            "message": "Requirement submitted for Admin review."
+        }), 200
+
+    except Exception:
+        return jsonify({
+            "success": False,
+            "message": "Unable to submit the requirement."
         }), 500
