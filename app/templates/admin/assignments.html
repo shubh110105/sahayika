@@ -1,0 +1,182 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assignment Review | MaidMate</title>
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+</head>
+<body class="bg-light">
+
+<div class="container py-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>Assignment Review</h2>
+            <p class="text-muted mb-0">
+                Review customer-confirmed assignments before activating employment.
+            </p>
+        </div>
+        <a href="/admin/dashboard" class="btn btn-outline-secondary">
+            Dashboard
+        </a>
+    </div>
+
+    <div id="message" class="alert d-none" role="alert"></div>
+    <div id="assignments" class="row g-3">
+        <div class="col-12 text-muted">Loading assignments...</div>
+    </div>
+</div>
+
+<script>
+const container = document.getElementById("assignments");
+const messageBox = document.getElementById("message");
+
+function showMessage(message, success) {
+    messageBox.textContent = message;
+    messageBox.className =
+        "alert " + (success ? "alert-success" : "alert-danger");
+}
+
+function addDetail(body, label, value) {
+    const p = document.createElement("p");
+    const strong = document.createElement("strong");
+    strong.textContent = label + ": ";
+    p.appendChild(strong);
+    p.appendChild(document.createTextNode(
+        value === null || value === undefined || value === ""
+            ? "Not provided"
+            : String(value)
+    ));
+    body.appendChild(p);
+}
+
+async function loadAssignments() {
+    container.replaceChildren();
+
+    try {
+        const response = await fetch("/admin/assignments/pending-confirmation");
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(
+                data.message || "Unable to load pending assignments."
+            );
+        }
+
+        if (!data.assignments.length) {
+            const empty = document.createElement("div");
+            empty.className = "col-12 text-muted";
+            empty.textContent =
+                "No assignments are awaiting final confirmation.";
+            container.appendChild(empty);
+            return;
+        }
+
+        data.assignments.forEach(assignment => {
+            const column = document.createElement("div");
+            column.className = "col-12 col-lg-6";
+
+            const card = document.createElement("div");
+            card.className = "card shadow-sm h-100";
+
+            const body = document.createElement("div");
+            body.className = "card-body";
+
+            const heading = document.createElement("h5");
+            heading.className = "card-title";
+            heading.textContent =
+                "Assignment #" + assignment.assignment_id;
+            body.appendChild(heading);
+
+            addDetail(body, "Requirement", assignment.requirement_id);
+            addDetail(body, "Customer", assignment.customer_name);
+            addDetail(body, "Maid", assignment.maid_name);
+            addDetail(body, "Location", [
+                assignment.location_address,
+                assignment.city,
+                assignment.state,
+                assignment.pincode
+            ].filter(Boolean).join(", "));
+            addDetail(body, "Services", assignment.services);
+            addDetail(
+                body,
+                "Estimated monthly salary",
+                assignment.estimated_monthly_salary === null
+                    ? "Not available"
+                    : "₹" + Number(
+                        assignment.estimated_monthly_salary
+                    ).toLocaleString("en-IN")
+            );
+            addDetail(body, "Status", assignment.assignment_status);
+
+            const button = document.createElement("button");
+            button.className = "btn btn-success mt-2";
+            button.textContent = "Confirm & Activate Employment";
+
+            button.addEventListener("click", async () => {
+                if (!confirm(
+                    "Confirm this assignment and activate employment? " +
+                    "Verify the customer confirmation and salary first."
+                )) {
+                    return;
+                }
+
+                button.disabled = true;
+
+                try {
+                    const result = await fetch(
+                        `/admin/assignments/${assignment.assignment_id}/confirm`,
+                        {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({})
+                        }
+                    );
+
+                    const resultData = await result.json();
+
+                    if (!result.ok || !resultData.success) {
+                        throw new Error(
+                            resultData.message ||
+                            "Unable to finalize assignment."
+                        );
+                    }
+
+                    showMessage(
+                        resultData.message +
+                        " Employment ID: " + resultData.employment_id,
+                        true
+                    );
+
+                    await loadAssignments();
+                } catch (error) {
+                    showMessage(error.message, false);
+                    button.disabled = false;
+                }
+            });
+
+            body.appendChild(button);
+            card.appendChild(body);
+            column.appendChild(card);
+            container.appendChild(column);
+        });
+    } catch (error) {
+        container.replaceChildren();
+        const errorText = document.createElement("p");
+        errorText.className = "text-danger";
+        errorText.textContent = error.message;
+        container.appendChild(errorText);
+    }
+}
+
+loadAssignments();
+</script>
+
+</body>
+</html>
