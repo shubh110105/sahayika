@@ -1,0 +1,145 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MaidMate - My Services</title>
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+</head>
+<body>
+<nav class="navbar navbar-dark bg-dark">
+    <div class="container">
+        <a class="navbar-brand" href="{{ url_for('dashboard.maid_dashboard') }}">
+            MaidMate
+        </a>
+        <span class="text-white">My Services</span>
+    </div>
+</nav>
+
+<main class="container py-4">
+    <a href="{{ url_for('dashboard.maid_dashboard') }}"
+       class="btn btn-outline-secondary btn-sm mb-3">
+        Back to Dashboard
+    </a>
+
+    <h2>Manage My Services</h2>
+    <p class="text-muted">
+        Select every service you provide. Only select services you can perform.
+    </p>
+
+    <div id="message" class="alert alert-info" aria-live="polite">
+        Loading services...
+    </div>
+
+    <form id="servicesForm">
+        <div id="serviceOptions" class="row g-3 mb-4"></div>
+
+        <button id="saveButton" type="submit" class="btn btn-primary">
+            Save My Services
+        </button>
+    </form>
+</main>
+
+<script>
+const message = document.getElementById("message");
+const serviceOptions = document.getElementById("serviceOptions");
+const servicesForm = document.getElementById("servicesForm");
+const saveButton = document.getElementById("saveButton");
+
+async function loadServices() {
+    try {
+        const response = await fetch("/maid/services");
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || "Unable to load services.");
+        }
+
+        const selectedIds = new Set(
+            result.my_services.map(item => Number(item.service_id))
+        );
+
+        serviceOptions.replaceChildren();
+
+        result.available_services.forEach(function (service) {
+            const column = document.createElement("div");
+            column.className = "col-md-6 col-lg-4";
+
+            const card = document.createElement("label");
+            card.className = "card h-100 p-3";
+
+            const row = document.createElement("div");
+            row.className = "form-check";
+
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.className = "form-check-input";
+            checkbox.name = "service_ids";
+            checkbox.value = service.service_id;
+            checkbox.checked = selectedIds.has(Number(service.service_id));
+            checkbox.id = `service-${service.service_id}`;
+
+            const label = document.createElement("span");
+            label.className = "form-check-label ms-2";
+            label.textContent = service.service_name;
+
+            row.append(checkbox, label);
+            card.appendChild(row);
+            column.appendChild(card);
+            serviceOptions.appendChild(column);
+        });
+
+        message.className = "alert alert-info";
+        message.textContent = "Select your services and save your changes.";
+    } catch (error) {
+        message.className = "alert alert-danger";
+        message.textContent = error.message;
+    }
+}
+
+servicesForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    const serviceIds = Array.from(
+        servicesForm.querySelectorAll(
+            'input[name="service_ids"]:checked'
+        )
+    ).map(input => Number(input.value));
+
+    saveButton.disabled = true;
+    saveButton.textContent = "Saving...";
+
+    try {
+        const response = await fetch("/maid/services", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ service_ids: serviceIds })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || "Unable to save services.");
+        }
+
+        message.className = "alert alert-success";
+        message.textContent = result.message;
+    } catch (error) {
+        message.className = "alert alert-danger";
+        message.textContent = error.message;
+    } finally {
+        saveButton.disabled = false;
+        saveButton.textContent = "Save My Services";
+    }
+});
+
+loadServices();
+</script>
+</body>
+</html>
