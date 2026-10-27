@@ -1,0 +1,312 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Active Employments | MaidMate</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 24px;
+            font-family: Arial, sans-serif;
+            background: #f4f6f9;
+            color: #222;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin: 0;
+        }
+
+        .summary {
+            background: white;
+            padding: 18px 22px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px #0000000d;
+        }
+
+        .summary strong {
+            font-size: 26px;
+            display: block;
+            margin-top: 6px;
+        }
+
+        .employment-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 18px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 22px;
+            box-shadow: 0 2px 8px #0000000d;
+            border-top: 4px solid #198754;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .card-header h2 {
+            font-size: 19px;
+            margin: 0;
+        }
+
+        .status {
+            color: #146c43;
+            background: #d1e7dd;
+            padding: 6px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .detail {
+            margin: 12px 0;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+
+        .detail span {
+            color: #666;
+            display: block;
+            font-size: 13px;
+        }
+
+        .salary {
+            font-size: 22px;
+            font-weight: bold;
+            color: #198754;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px 14px;
+            background: #343a40;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+        }
+
+        .button:hover {
+            background: #212529;
+        }
+
+        .message {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 14px;
+            }
+
+            .employment-list {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <div class="header">
+            <div>
+                <h1>Active Employments</h1>
+                <p class="subtitle">
+                    View and monitor currently active maid employments.
+                </p>
+            </div>
+
+            <a class="button" href="/admin/dashboard">
+                Back to Dashboard
+            </a>
+        </div>
+
+        <section class="summary">
+            Total Active Employments
+            <strong id="total-count">0</strong>
+        </section>
+
+        <div id="message" class="message">
+            Loading active employments...
+        </div>
+
+        <section
+            id="employment-list"
+            class="employment-list"
+            aria-live="polite">
+        </section>
+    </main>
+
+    <script>
+        // Escape database text before placing it into HTML.
+        function escapeHTML(value) {
+            return String(value ?? "").replace(/[&<>"']/g, function (char) {
+                const entities = {
+                    "&": "&amp;",
+                    "<": "&lt;",
+                    ">": "&gt;",
+                    '"': "&quot;",
+                    "'": "&#39;"
+                };
+
+                return entities[char];
+            });
+        }
+
+        function formatDate(value) {
+            if (!value) return "Not available";
+
+            const date = new Date(value);
+
+            if (Number.isNaN(date.getTime())) {
+                return escapeHTML(value);
+            }
+
+            return date.toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                timeZone: "UTC"
+            });
+        }
+
+        async function loadEmployments() {
+            const message = document.getElementById("message");
+            const list = document.getElementById("employment-list");
+            const count = document.getElementById("total-count");
+
+            try {
+                const response = await fetch("/admin/employments/active", {
+                    headers: {
+                        "Accept": "application/json"
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(
+                        "Could not load employment records. HTTP " +
+                        response.status
+                    );
+                }
+
+                const data = await response.json();
+
+                if (!data.success || !Array.isArray(data.employments)) {
+                    throw new Error("The server returned an invalid response.");
+                }
+
+                const employments = data.employments;
+
+                count.textContent = employments.length;
+                message.hidden = employments.length > 0;
+
+                if (employments.length === 0) {
+                    message.textContent = "There are no active employments.";
+                    return;
+                }
+
+                list.innerHTML = employments.map(function (item) {
+                    return `
+                        <article class="card">
+                            <div class="card-header">
+                                <h2>Employment #${escapeHTML(item.employment_id)}</h2>
+                                <span class="status">ACTIVE</span>
+                            </div>
+
+                            <div class="detail">
+                                <span>Assignment ID</span>
+                                ${escapeHTML(item.assignment_id)}
+                            </div>
+
+                            <div class="detail">
+                                <span>Requirement ID</span>
+                                ${escapeHTML(item.requirement_id)}
+                            </div>
+
+                            <div class="detail">
+                                <span>Customer</span>
+                                ${escapeHTML(item.customer_name)}
+                                (ID: ${escapeHTML(item.customer_id)})
+                            </div>
+
+                            <div class="detail">
+                                <span>Maid</span>
+                                ${escapeHTML(item.maid_name)}
+                                (ID: ${escapeHTML(item.maid_id)})
+                            </div>
+
+                            <div class="detail">
+                                <span>Monthly Salary</span>
+                                <div class="salary">
+                                    ₹${escapeHTML(item.monthly_salary)}
+                                </div>
+                            </div>
+
+                            <div class="detail">
+                                <span>Employment Start Date</span>
+                                ${formatDate(item.start_date)}
+                            </div>
+
+                            <div class="detail">
+                                <span>Household Address</span>
+                                ${escapeHTML(item.location_address)}
+                            </div>
+
+                            <div class="detail">
+                                <span>City, State - PIN</span>
+                                ${escapeHTML(item.city)},
+                                ${escapeHTML(item.state)} -
+                                ${escapeHTML(item.pincode)}
+                            </div>
+                        </article>
+                    `;
+                }).join("");
+
+                message.textContent = "";
+            } catch (error) {
+                count.textContent = "—";
+                message.hidden = false;
+                message.textContent = error.message;
+            }
+        }
+
+        loadEmployments();
+    </script>
+</body>
+</html>

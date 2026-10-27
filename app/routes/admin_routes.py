@@ -427,3 +427,24 @@ def pending_admin_assignments():
 def admin_assignments_page():
     """Render the Admin assignment review page."""
     return render_template("admin/assignments.html")
+
+
+@admin.route("/employments/active", methods=["GET"])
+@role_required("ADMIN")
+def active_employments_route():
+    """Return active employment records for Admin review."""
+    from app.models.active_employment_model import get_active_employments
+
+    employments = get_active_employments()
+
+    return jsonify({
+        "success": True,
+        "employments": employments
+    }), 200
+
+
+@admin.route("/employments/active/page", methods=["GET"])
+@role_required("ADMIN")
+def active_employments_page():
+    """Render the Admin Active Employments page."""
+    return render_template("admin/active_employments.html")
