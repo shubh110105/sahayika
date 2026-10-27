@@ -65,3 +65,81 @@ def save_profile():
 @role_required("CUSTOMER")
 def profile_page():
     return render_template("customer/profile.html")
+
+
+@customer.route(
+    "/assignments/<int:assignment_id>/confirm",
+    methods=["POST"]
+)
+@role_required("CUSTOMER")
+def confirm_assignment(assignment_id):
+    """Allow the requirement-owning customer to confirm an accepted assignment."""
+
+    from app.models.customer_assignment_model import confirm_maid_assignment
+
+    customer_id = session.get("user_id")
+
+    if customer_id is None:
+        return jsonify({
+            "success": False,
+            "message": "Customer session is missing. Please log in again."
+        }), 401
+
+    try:
+        success, message = confirm_maid_assignment(
+            assignment_id=assignment_id,
+            customer_id=customer_id
+        )
+
+        if not success:
+            return jsonify({
+                "success": False,
+                "message": message
+            }), 400
+
+        return jsonify({
+            "success": True,
+            "message": message,
+            "assignment_id": assignment_id,
+            "status": "CUSTOMER_CONFIRMED"
+        }), 200
+
+    except Exception as error:
+        print("CUSTOMER ASSIGNMENT CONFIRMATION ERROR:", repr(error))
+        return jsonify({
+            "success": False,
+            "message": "Unable to confirm the assignment."
+        }), 500
+
+@customer.route("/assignments", methods=["GET"])
+@role_required("CUSTOMER")
+def get_my_assignments():
+    """Return assignments belonging to the logged-in customer."""
+    from app.models.customer_assignment_list_model import (
+        get_customer_assignments
+    )
+
+    customer_id = session.get("user_id")
+
+    try:
+        assignments = get_customer_assignments(customer_id)
+
+        return jsonify({
+            "success": True,
+            "assignments": assignments or []
+        }), 200
+
+    except Exception:
+        import logging
+        logging.exception("Failed to load customer assignments")
+
+        return jsonify({
+            "success": False,
+            "message": "Unable to load assignments."
+        }), 500
+
+@customer.route("/assignments/page", methods=["GET"])
+@role_required("CUSTOMER")
+def my_assignments_page():
+    """Render the customer assignments page."""
+    return render_template("customer/assignments.html")
