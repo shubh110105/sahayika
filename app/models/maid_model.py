@@ -56,9 +56,10 @@ def create_maid_profile(
             city,
             pincode,
             experience_years,
-            bio
+            bio,
+            profile_status
         )
-        VALUES (%s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, 'COMPLETE')
     """
 
     return execute_query(
@@ -89,7 +90,8 @@ def update_maid_profile(
             city = %s,
             pincode = %s,
             experience_years = %s,
-            bio = %s
+            bio = %s,
+            profile_status = 'COMPLETE'
         WHERE maid_id = %s
     """
 
