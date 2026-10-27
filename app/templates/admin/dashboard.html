@@ -1,10 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>MaidMate - Admin Dashboard</title>
 
     <link
@@ -14,7 +12,6 @@
 </head>
 
 <body>
-
 <nav class="navbar navbar-dark bg-dark">
     <div class="container">
         <span class="navbar-brand">MaidMate</span>
@@ -23,46 +20,165 @@
 </nav>
 
 <div class="container mt-5">
-
     <h2>Admin Dashboard</h2>
-
     <p class="text-muted">
         Manage verification, requirements, assignments,
         complaints, salaries and platform analytics.
     </p>
 
     <div class="row mt-4">
-
+        <!-- Maid Verification Card -->
         <div class="col-md-4 mb-3">
-            <div class="card">
+           <div class="card h-100">
                 <div class="card-body">
-                    <h5>Maid Verification</h5>
-                    <p>Review and manage maid verification.</p>
+                    <h5 class="card-title">Maid Verification</h5>
+                    <p class="card-text">
+                        Review and manage maid verification requests.
+                    </p>
+                    <a
+                        href="{{ url_for('admin.pending_maid_verifications_page') }}"
+                        class="btn btn-primary"
+                    >
+                        View Verification Queue
+                    </a>
+                </div>
+            </div>
+        </div> <!-- Fixed: Added missing closing div here -->
+
+        <!-- Assignments Card -->
+        <div class="col-md-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Assignments</h5>
+                    <p class="card-text">Review matching and maid assignments.</p>
                 </div>
             </div>
         </div>
 
+        <!-- Analytics Card -->
         <div class="col-md-4 mb-3">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-body">
-                    <h5>Assignments</h5>
-                    <p>Review matching and maid assignments.</p>
+                    <h5 class="card-title">Analytics</h5>
+                    <p class="card-text">View platform performance and statistics.</p>
                 </div>
             </div>
         </div>
 
+        <!-- Salary Review Requests Card -->
         <div class="col-md-4 mb-3">
-            <div class="card">
+            <div class="card h-100 border-warning">
                 <div class="card-body">
-                    <h5>Analytics</h5>
-                    <p>View platform performance and statistics.</p>
+                    <h5 class="card-title">Salary Review Requests</h5>
+                    <p class="card-text">
+                        Review customer requests about estimated monthly salaries.
+                    </p>
+                    <a
+                        href="{{ url_for('admin.salary_review_page') }}"
+                        class="btn btn-outline-warning"
+                    >
+                        View Requests
+                    </a>
                 </div>
             </div>
         </div>
-
     </div>
 
+    <hr class="my-5">
+
+    <section>
+        <h3>Submitted Household Requirements</h3>
+        <p class="text-muted">
+            Review customer requirements and inspect eligible maid recommendations.
+        </p>
+
+        <div id="requirementsMessage" class="mb-3" aria-live="polite">
+            Loading requirements...
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Requirement</th>
+                        <th>Location</th>
+                        <th>Salary Estimate</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="requirementsTableBody"></tbody>
+            </table>
+        </div>
+    </section>
 </div>
 
+<script>
+document.addEventListener("DOMContentLoaded", async function () {
+    const message = document.getElementById("requirementsMessage");
+    const tableBody = document.getElementById("requirementsTableBody");
+
+    try {
+        const response = await fetch(
+            "{{ url_for('admin.submitted_requirements') }}"
+        );
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(
+                result.message || "Unable to load submitted requirements."
+            );
+        }
+
+        tableBody.replaceChildren();
+
+        if (!result.requirements.length) {
+            message.textContent = "No submitted requirements awaiting review.";
+            return;
+        }
+
+        message.textContent =
+            `Found ${result.requirements.length} requirement(s) awaiting review.`;
+
+        result.requirements.forEach(function (requirement) {
+            const row = document.createElement("tr");
+
+            const values = [
+                `#${requirement.requirement_id}`,
+                [
+                    requirement.city,
+                    requirement.state,
+                    requirement.pincode
+                ].filter(Boolean).join(", "),
+                requirement.estimated_monthly_salary == null
+                    ? "Not available"
+                    : `₹${Number(requirement.estimated_monthly_salary).toFixed(2)}`,
+                requirement.status
+            ];
+
+            values.forEach(function (value) {
+                const cell = document.createElement("td");
+                cell.textContent = value ?? "";
+                row.appendChild(cell);
+            });
+
+            const actionCell = document.createElement("td");
+            const shortlistLink = document.createElement("a");
+
+            shortlistLink.className = "btn btn-primary btn-sm";
+            shortlistLink.textContent = "View Maid Shortlist";
+            shortlistLink.href =
+                `/admin/requirements/${requirement.requirement_id}/shortlist/page`;
+
+            actionCell.appendChild(shortlistLink);
+            row.appendChild(actionCell);
+            tableBody.appendChild(row);
+        });
+    } catch (error) {
+        message.textContent = error.message;
+        message.className = "mb-3 text-danger";
+    }
+});
+</script>
 </body>
 </html>
