@@ -2,12 +2,16 @@
 from datetime import datetime
 
 
+
 from app.models.requirement_model import (
     create_requirement_with_details,
     get_customer_requirements,
     get_service_pricing,
     save_requirement_salary_estimate,
+    get_requirement_services,   # Retrieve the requirement's saved services.
+    get_requirement_schedules,  # Retrieve its saved weekly schedule.
 )
+
 
 from app.database import fetch_one
 
@@ -287,4 +291,112 @@ def estimate_monthly_salary(service_ids, schedules):
         "estimated_monthly_salary": round(estimated_total, 2),
         "working_days_per_week": working_days,
         "breakdown": breakdown,
+    }
+
+def reassess_requirement_salary(requirement_id):
+    """Recalculate and save salary for an Admin-requested reassessment."""
+
+    # Only process requirements explicitly marked for reassessment.
+    requirement = fetch_one(
+        """
+        SELECT requirement_id
+        FROM household_requirements
+        WHERE requirement_id = %s
+          AND status = 'SALARY_REVIEW_REQUESTED'
+          AND salary_review_decision = 'REASSESSMENT_REQUESTED'
+        """,
+        (requirement_id,),
+    )
+
+    if not requirement:
+        return False, "This requirement is not awaiting reassessment."
+
+    # Load the services and schedule originally submitted by the customer.
+    service_rows = get_requirement_services(requirement_id)
+    schedule_rows = get_requirement_schedules(requirement_id)
+
+    if not service_rows or not schedule_rows:
+        return False, "Saved services or schedule are missing."
+
+    # Extract service IDs and normalize database time values to HH:MM.
+    service_ids = [int(row["service_id"]) for row in service_rows]
+
+    
+    def normalize_time(value):
+        # MySQL TIME values may be returned as timedelta objects.
+        if hasattr(value, "total_seconds"):
+            total_seconds = int(value.total_seconds())
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+
+            # Always produce zero-padded HH:MM, such as 09:00.
+            return f"{hours:02d}:{minutes:02d}"
+
+        # Python time objects can format themselves directly.
+        if hasattr(value, "strftime"):
+            return value.strftime("%H:%M")
+
+        # Accept strings with or without seconds.
+        text = str(value).strip()
+
+        for time_format in ("%H:%M", "%H:%M:%S"):
+            try:
+                return datetime.strptime(
+                    text, time_format
+                ).strftime("%H:%M")
+            except ValueError:
+                continue
+
+        # Reject values that cannot safely be interpreted as times.
+        raise ValueError("Invalid saved schedule time.")
+
+    try:
+        # Convert database rows into the format expected by the calculator.
+        schedules = [
+            {
+                "day_of_week": str(row["day_of_week"]).upper(),
+                "start_time": normalize_time(row["start_time"]),
+                "end_time": normalize_time(row["end_time"]),
+            }
+            for row in schedule_rows
+        ]
+    except (KeyError, TypeError, ValueError):
+        return False, "Unable to read the saved schedule times."
+
+
+    # Reuse the existing salary calculator instead of duplicating its logic.
+    success, result = estimate_monthly_salary(service_ids, schedules)
+ 
+    if not success:
+        return False, result
+
+    # Save the recalculated amount and reset the review status.
+    estimated_salary = result["estimated_monthly_salary"]
+
+    save_requirement_salary_estimate(
+        requirement_id,
+        estimated_salary,
+    )
+
+    # Verify the update because execute_query's return value is not a
+    # reliable indicator of whether an UPDATE affected a database row.
+    saved_requirement = fetch_one(
+        """
+        SELECT requirement_id
+        FROM household_requirements
+        WHERE requirement_id = %s
+          AND status = 'SALARY_ESTIMATED'
+          AND salary_review_decision = 'PENDING'
+          AND estimated_monthly_salary = %s
+        """,
+        (requirement_id, estimated_salary),
+    )
+
+    if not saved_requirement:
+        return False, "Unable to save the reassessed salary."
+
+    return True, {
+        "requirement_id": requirement_id,
+        "estimated_monthly_salary": estimated_salary,
+        "message": "Salary reassessed and saved successfully.",
     }
