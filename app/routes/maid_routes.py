@@ -425,3 +425,77 @@ def maid_active_employments_route():
 def maid_active_employments_page():
     """Render the logged-in maid's active employment page."""
     return render_template("maid/active_employments.html")
+
+
+
+@maid.route("/attendance", methods=["GET"])
+@role_required("MAID")
+def maid_attendance_route():
+    """Return attendance records for the logged-in maid."""
+    from app.models.attendance_model import get_maid_attendance
+
+    maid_id = session.get("user_id")
+    records = get_maid_attendance(maid_id)
+
+    return jsonify({
+        "success": True,
+        "attendance": records
+    }), 200
+
+
+@maid.route("/attendance/check-in", methods=["POST"])
+@role_required("MAID")
+def maid_attendance_check_in_route():
+    """Record today's check-in for an active scheduled employment."""
+    from datetime import date
+    from flask import request
+    from app.models.attendance_model import record_check_in
+
+    maid_id = session.get("user_id")
+    data = request.get_json(silent=True) or {}
+    employment_id = data.get("employment_id")
+
+    if not employment_id:
+        return jsonify({
+            "success": False,
+            "message": "Employment ID is required."
+        }), 400
+
+    success, message, attendance_id = record_check_in(
+        maid_id=maid_id,
+        employment_id=employment_id,
+        attendance_date=date.today()
+    )
+
+    return jsonify({
+        "success": success,
+        "message": message,
+        "attendance_id": attendance_id
+    }), 200 if success else 400
+
+
+@maid.route("/attendance/<int:attendance_id>/check-out", methods=["POST"])
+@role_required("MAID")
+def maid_attendance_check_out_route(attendance_id):
+    """Record check-out for the maid's own attendance record."""
+    from app.models.attendance_model import record_check_out
+
+    maid_id = session.get("user_id")
+    success, message, saved_id = record_check_out(
+        maid_id=maid_id,
+        attendance_id=attendance_id
+    )
+
+    return jsonify({
+        "success": success,
+        "message": message,
+        "attendance_id": saved_id
+    }), 200 if success else 400
+
+
+
+@maid.route("/attendance/page", methods=["GET"])
+@role_required("MAID")
+def maid_attendance_page():
+    """Render the logged-in maid's attendance page."""
+    return render_template("maid/attendance.html")

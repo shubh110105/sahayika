@@ -1,0 +1,386 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Attendance | MaidMate</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+
+    <style>
+        body {
+            background: #f4f6f9;
+        }
+
+        .attendance-card {
+            border: none;
+            border-left: 4px solid #198754;
+        }
+
+        .detail-label {
+            color: #6c757d;
+            font-size: 13px;
+        }
+
+        .detail-value {
+            font-weight: 500;
+            overflow-wrap: anywhere;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 20px;
+            background: #fff3cd;
+            color: #664d03;
+            font-size: 12px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar navbar-dark bg-success">
+        <div class="container">
+            <span class="navbar-brand">MaidMate</span>
+            <span class="text-white">My Attendance</span>
+        </div>
+    </nav>
+
+    <main class="container py-4">
+        <div class="d-flex justify-content-between align-items-center
+                    flex-wrap gap-3 mb-4">
+            <div>
+                <h2>My Attendance</h2>
+                <p class="text-muted mb-0">
+                    Record your work times and review attendance history.
+                </p>
+            </div>
+
+            <a href="/maid/dashboard" class="btn btn-outline-success">
+                Back to Dashboard
+            </a>
+        </div>
+
+        <div id="message" class="alert alert-info" role="status">
+            Loading attendance...
+        </div>
+
+        <section class="card shadow-sm mb-4">
+            <div class="card-body">
+                <h5>Record Today's Attendance</h5>
+                <p class="text-muted">
+                    Select your active employment to check in for today's
+                    scheduled work.
+                </p>
+
+                <label for="employment-select" class="form-label">
+                    Active Employment
+                </label>
+
+                <select id="employment-select" class="form-select mb-3">
+                    <option value="">Loading employments...</option>
+                </select>
+
+                <button id="check-in-button" class="btn btn-success">
+                    Check In
+                </button>
+            </div>
+        </section>
+
+        <h4 class="mb-3">Attendance History</h4>
+        <div id="attendance-list" class="row g-3"></div>
+    </main>
+
+    <script>
+        let employments = [];
+        let attendanceRecords = [];
+
+        function escapeHTML(value) {
+            return String(value ?? "").replace(/[&<>"']/g, function (char) {
+                const entities = {
+                    "&": "&amp;",
+                    "<": "&lt;",
+                    ">": "&gt;",
+                    '"': "&quot;",
+                    "'": "&#39;"
+                };
+
+                return entities[char];
+            });
+        }
+
+        function formatDate(value) {
+            if (!value) return "—";
+
+            const date = new Date(value);
+
+            if (Number.isNaN(date.getTime())) {
+                return escapeHTML(value);
+            }
+
+            return date.toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                timeZone: "UTC"
+            });
+        }
+
+        function formatDateTime(value) {
+            if (!value) return "Not recorded";
+
+            const date = new Date(value);
+
+            if (Number.isNaN(date.getTime())) {
+                return escapeHTML(value);
+            }
+
+            return date.toLocaleString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        }
+
+        async function loadEmployments() {
+            const response = await fetch("/maid/employments/active");
+
+            if (!response.ok) {
+                throw new Error("Could not load active employments.");
+            }
+
+            const data = await response.json();
+
+            if (!data.success || !Array.isArray(data.employments)) {
+                throw new Error("Invalid employment response.");
+            }
+
+            employments = data.employments;
+
+            const select = document.getElementById("employment-select");
+            select.replaceChildren();
+
+            if (employments.length === 0) {
+                select.add(new Option("No active employments", ""));
+                document.getElementById("check-in-button").disabled = true;
+                return;
+            }
+
+            select.add(new Option("Choose an employment", ""));
+
+            employments.forEach(function (item) {
+                select.add(new Option(
+                    `Employment #${item.employment_id} — ${item.customer_name}`,
+                    item.employment_id
+                ));
+            });
+        }
+
+        function renderAttendance() {
+            const list = document.getElementById("attendance-list");
+            list.replaceChildren();
+
+            if (attendanceRecords.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "col-12";
+                empty.innerHTML = `
+                    <div class="alert alert-secondary">
+                        No attendance records found yet.
+                    </div>
+                `;
+                list.appendChild(empty);
+                return;
+            }
+
+            attendanceRecords.forEach(function (item) {
+                const column = document.createElement("div");
+                column.className = "col-12 col-lg-6";
+
+                const canCheckOut =
+                    Boolean(item.check_in) &&
+                    !item.check_out &&
+                    !["REJECTED", "DISPUTED"].includes(item.status);
+
+                column.innerHTML = `
+                    <article class="card attendance-card shadow-sm h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between
+                                        align-items-center gap-2 mb-3">
+                                <h5 class="mb-0">
+                                    ${formatDate(item.attendance_date)}
+                                </h5>
+                                <span class="status">
+                                    ${escapeHTML(item.status)}
+                                </span>
+                            </div>
+
+                            <p class="mb-2">
+                                <strong>Employment:</strong>
+                                #${escapeHTML(item.employment_id)}
+                            </p>
+
+                            <p class="mb-2">
+                                <strong>Customer:</strong>
+                                ${escapeHTML(item.customer_name)}
+                            </p>
+
+                            <p class="mb-2">
+                                <strong>Check-in:</strong>
+                                ${formatDateTime(item.check_in)}
+                            </p>
+
+                            <p class="mb-3">
+                                <strong>Check-out:</strong>
+                                ${formatDateTime(item.check_out)}
+                            </p>
+
+                            ${canCheckOut ? `
+                                <button
+                                    class="btn btn-outline-success btn-sm checkout-button"
+                                    data-attendance-id="${escapeHTML(item.attendance_id)}">
+                                    Check Out
+                                </button>
+                            ` : ""}
+                        </div>
+                    </article>
+                `;
+
+                list.appendChild(column);
+            });
+
+            list.querySelectorAll(".checkout-button").forEach(function (button) {
+                button.addEventListener("click", async function () {
+                    await checkOut(button.dataset.attendanceId);
+                });
+            });
+        }
+
+        async function loadAttendance() {
+            const response = await fetch("/maid/attendance");
+
+            if (!response.ok) {
+                throw new Error("Could not load attendance history.");
+            }
+
+            const data = await response.json();
+
+            if (!data.success || !Array.isArray(data.attendance)) {
+                throw new Error("Invalid attendance response.");
+            }
+
+            attendanceRecords = data.attendance;
+            renderAttendance();
+        }
+
+        async function checkIn() {
+            const select = document.getElementById("employment-select");
+            const employmentId = select.value;
+            const message = document.getElementById("message");
+            const button = document.getElementById("check-in-button");
+
+            if (!employmentId) {
+                message.className = "alert alert-warning";
+                message.textContent = "Please select an active employment.";
+                return;
+            }
+
+            button.disabled = true;
+
+            try {
+                const response = await fetch("/maid/attendance/check-in", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    body: JSON.stringify({
+                        employment_id: Number(employmentId)
+                    })
+                });
+
+                const data = await response.json();
+
+                message.className = data.success
+                    ? "alert alert-success"
+                    : "alert alert-warning";
+
+                message.textContent = data.message || "Request completed.";
+
+                if (data.success) {
+                    await loadAttendance();
+                }
+            } catch (error) {
+                message.className = "alert alert-danger";
+                message.textContent = error.message;
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function checkOut(attendanceId) {
+            const message = document.getElementById("message");
+
+            if (!confirm("Record your check-out now?")) {
+                return;
+            }
+
+            try {
+                const response = await fetch(
+                    `/maid/attendance/${encodeURIComponent(attendanceId)}/check-out`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Accept": "application/json"
+                        }
+                    }
+                );
+
+                const data = await response.json();
+
+                message.className = data.success
+                    ? "alert alert-success"
+                    : "alert alert-warning";
+
+                message.textContent = data.message || "Request completed.";
+
+                if (data.success) {
+                    await loadAttendance();
+                }
+            } catch (error) {
+                message.className = "alert alert-danger";
+                message.textContent = error.message;
+            }
+        }
+
+        document.getElementById("check-in-button").addEventListener(
+            "click",
+            checkIn
+        );
+
+        async function initializePage() {
+            try {
+                await loadEmployments();
+                await loadAttendance();
+
+                const message = document.getElementById("message");
+                message.className = "alert alert-info";
+                message.textContent =
+                    "Attendance loaded. Select an employment to check in.";
+            } catch (error) {
+                const message = document.getElementById("message");
+                message.className = "alert alert-danger";
+                message.textContent = error.message;
+            }
+        }
+
+        initializePage();
+    </script>
+</body>
+</html>
