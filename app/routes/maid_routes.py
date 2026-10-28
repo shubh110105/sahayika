@@ -443,10 +443,11 @@ def maid_attendance_route():
     }), 200
 
 
+
 @maid.route("/attendance/check-in", methods=["POST"])
 @role_required("MAID")
 def maid_attendance_check_in_route():
-    """Record today's check-in for an active scheduled employment."""
+    """Record check-in for an active scheduled employment."""
     from datetime import date
     from flask import request
     from app.models.attendance_model import record_check_in
@@ -454,17 +455,32 @@ def maid_attendance_check_in_route():
     maid_id = session.get("user_id")
     data = request.get_json(silent=True) or {}
     employment_id = data.get("employment_id")
+    attendance_date = data.get("attendance_date")
 
     if not employment_id:
         return jsonify({
             "success": False,
-            "message": "Employment ID is required."
+            "message": "Employment ID is required.",
+            "attendance_id": None
         }), 400
+
+    # Default to today's date when the client does not supply a date.
+    if attendance_date:
+        try:
+            attendance_date = date.fromisoformat(attendance_date)
+        except (TypeError, ValueError):
+            return jsonify({
+                "success": False,
+                "message": "Invalid attendance date. Use YYYY-MM-DD.",
+                "attendance_id": None
+            }), 400
+    else:
+        attendance_date = date.today()
 
     success, message, attendance_id = record_check_in(
         maid_id=maid_id,
         employment_id=employment_id,
-        attendance_date=date.today()
+        attendance_date=attendance_date
     )
 
     return jsonify({

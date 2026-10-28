@@ -448,3 +448,29 @@ def active_employments_route():
 def active_employments_page():
     """Render the Admin Active Employments page."""
     return render_template("admin/active_employments.html")
+
+
+
+@admin.route("/attendance/disputes", methods=["GET"])
+@role_required("ADMIN")
+def admin_attendance_disputes_route():
+    """Return attendance disputes for Admin review."""
+
+    from app.models.admin_attendance_dispute_model import (
+        get_all_attendance_disputes
+    )
+
+    disputes = get_all_attendance_disputes()
+
+    return jsonify({
+        "success": True,
+        "disputes": disputes
+    }), 200
+
+
+
+@admin.route("/attendance/disputes/page", methods=["GET"])
+@role_required("ADMIN")
+def admin_attendance_disputes_page():
+    """Render the Admin attendance disputes page."""
+    return render_template("admin/attendance_disputes.html")
