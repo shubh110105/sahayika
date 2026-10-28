@@ -515,3 +515,53 @@ def maid_attendance_check_out_route(attendance_id):
 def maid_attendance_page():
     """Render the logged-in maid's attendance page."""
     return render_template("maid/attendance.html")
+
+
+
+@maid.route("/attendance/disputes", methods=["GET"])
+@role_required("MAID")
+def maid_attendance_disputes_route():
+    """Return disputes related to the logged-in maid."""
+    from app.models.maid_attendance_dispute_model import (
+        get_maid_attendance_disputes
+    )
+
+    maid_id = session.get("user_id")
+    disputes = get_maid_attendance_disputes(maid_id)
+
+    return jsonify({
+        "success": True,
+        "disputes": disputes
+    }), 200
+
+
+@maid.route("/attendance/disputes/<int:dispute_id>/respond", methods=["POST"])
+@role_required("MAID")
+def maid_attendance_dispute_response_route(dispute_id):
+    """Submit the logged-in maid's response to an attendance dispute."""
+    from flask import request
+    from app.models.maid_attendance_dispute_model import (
+        submit_maid_dispute_response
+    )
+
+    maid_id = session.get("user_id")
+    data = request.get_json(silent=True) or {}
+    response_text = data.get("response")
+
+    success, message = submit_maid_dispute_response(
+        maid_id=maid_id,
+        dispute_id=dispute_id,
+        response_text=response_text
+    )
+
+    return jsonify({
+        "success": success,
+        "message": message
+    }), 200 if success else 400
+
+
+@maid.route("/attendance/disputes/page", methods=["GET"])
+@role_required("MAID")
+def maid_attendance_disputes_page():
+    """Render the maid attendance disputes page."""
+    return render_template("maid/attendance_disputes.html")

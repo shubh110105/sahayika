@@ -474,3 +474,36 @@ def admin_attendance_disputes_route():
 def admin_attendance_disputes_page():
     """Render the Admin attendance disputes page."""
     return render_template("admin/attendance_disputes.html")
+
+
+
+@admin.route(
+    "/attendance/disputes/<int:dispute_id>/decide",
+    methods=["POST"]
+)
+@role_required("ADMIN")
+def admin_decide_attendance_dispute_route(dispute_id):
+    """Resolve or reject an attendance dispute."""
+
+    from flask import request
+    from app.models.admin_attendance_dispute_model import (
+        decide_attendance_dispute
+    )
+
+    admin_id = session.get("user_id")
+    data = request.get_json(silent=True) or {}
+
+    decision = data.get("decision")
+    reason = data.get("reason")
+
+    success, message = decide_attendance_dispute(
+        admin_id=admin_id,
+        dispute_id=dispute_id,
+        decision=decision,
+        reason=reason
+    )
+
+    return jsonify({
+        "success": success,
+        "message": message
+    }), 200 if success else 400

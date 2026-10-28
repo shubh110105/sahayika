@@ -250,22 +250,112 @@
                                 </div>
                             </div>
 
+                           
                             <div class="decision-box">
                                 <h4 class="h6">Admin Decision</h4>
-                                <div class="detail-value">
+
+                                <div class="detail-value mb-2">
                                     ${escapeHtml(dispute.admin_decision || "No decision recorded yet.")}
                                 </div>
+
                                 ${dispute.resolved_at ? `
-                                    <small class="text-muted">
-                                        Resolved: ${escapeHtml(formatDate(dispute.resolved_at))}
+                                    <small class="text-muted d-block mb-2">
+                                        Decision recorded: ${escapeHtml(formatDate(dispute.resolved_at))}
                                     </small>
                                 ` : ""}
+
+                                ${["OPEN", "MAID_RESPONDED", "UNDER_REVIEW"].includes(dispute.dispute_status) ? `
+                                    <form onsubmit="submitAdminDecision(event, ${Number(dispute.dispute_id)}, this)">
+                                        <label class="form-label" for="decision-reason-${Number(dispute.dispute_id)}">
+                                            Admin decision explanation
+                                        </label>
+
+                                        <textarea
+                                            id="decision-reason-${Number(dispute.dispute_id)}"
+                                            name="reason"
+                                            class="form-control mb-3"
+                                            rows="3"
+                                            maxlength="2000"
+                                            required
+                                            placeholder="Explain the decision after reviewing both sides."></textarea>
+
+                                        <button
+                                            type="submit"
+                                            class="btn btn-success me-2"
+                                            name="decision"
+                                            value="RESOLVED">
+                                            Resolve Dispute
+                                        </button>
+
+                                        <button
+                                            type="submit"
+                                            class="btn btn-danger"
+                                            name="decision"
+                                            value="REJECTED">
+                                            Reject Dispute
+                                        </button>
+                                    </form>
+                                ` : ""}
                             </div>
+
                         </div>
                     </article>
                 `;
             }).join("");
         }
+        
+async function submitAdminDecision(event, disputeId, form) {
+    event.preventDefault();
+
+    const submitButton = event.submitter;
+    const decision = submitButton.value;
+    const reason = form.elements.reason.value.trim();
+
+    if (!reason) {
+        pageMessage.className = "alert alert-warning";
+        pageMessage.textContent = "Please provide an explanation.";
+        return;
+    }
+
+    const action = decision === "RESOLVED" ? "resolve" : "reject";
+
+    if (!confirm(`Are you sure you want to ${action} this dispute?`)) {
+        return;
+    }
+
+    const buttons = form.querySelectorAll("button");
+    buttons.forEach(button => button.disabled = true);
+
+    try {
+        const response = await fetch(
+            `/admin/attendance/disputes/${disputeId}/decide`,
+            {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    decision: decision,
+                    reason: reason
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || "Could not record the decision.");
+        }
+
+        pageMessage.className = "alert alert-success";
+        pageMessage.textContent = data.message;
+
+        await loadDisputes();
+    } catch (error) {
+        pageMessage.className = "alert alert-danger";
+        pageMessage.textContent = error.message;
+        buttons.forEach(button => button.disabled = false);
+    }
+}
+
 
         loadDisputes();
     </script>
