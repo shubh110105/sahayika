@@ -143,3 +143,27 @@ def get_my_assignments():
 def my_assignments_page():
     """Render the customer assignments page."""
     return render_template("customer/assignments.html")
+
+
+@customer.route("/employments/active", methods=["GET"])
+@role_required("CUSTOMER")
+def customer_active_employments_route():
+    """Return active employments belonging to the logged-in customer."""
+    from app.models.customer_employment_model import (
+        get_customer_active_employments
+    )
+
+    customer_id = session.get("user_id")
+    employments = get_customer_active_employments(customer_id)
+
+    return jsonify({
+        "success": True,
+        "employments": employments
+    }), 200
+
+
+@customer.route("/employments/active/page", methods=["GET"])
+@role_required("CUSTOMER")
+def customer_active_employments_page():
+    """Render the customer's active employment page."""
+    return render_template("customer/active_employments.html")
