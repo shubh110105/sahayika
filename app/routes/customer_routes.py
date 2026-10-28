@@ -167,3 +167,58 @@ def customer_active_employments_route():
 def customer_active_employments_page():
     """Render the customer's active employment page."""
     return render_template("customer/active_employments.html")
+
+
+
+@customer.route("/attendance", methods=["GET"])
+@role_required("CUSTOMER")
+def customer_attendance_route():
+    """Return attendance records for the logged-in customer."""
+    from app.models.customer_attendance_model import (
+        get_customer_attendance
+    )
+
+    customer_id = session.get("user_id")
+    records = get_customer_attendance(customer_id)
+
+    return jsonify({
+        "success": True,
+        "attendance": records
+    }), 200
+
+
+
+@customer.route("/attendance/<int:attendance_id>/review", methods=["POST"])
+@role_required("CUSTOMER")
+def review_customer_attendance_route(attendance_id):
+    """Allow a customer to confirm or dispute attendance."""
+
+    from app.models.customer_attendance_model import (
+        confirm_customer_attendance
+    )
+
+    data = request.get_json(silent=True) or {}
+
+    decision = data.get("decision")
+    reason = data.get("reason")
+
+    customer_id = session.get("user_id")
+
+    success, message = confirm_customer_attendance(
+        customer_id=customer_id,
+        attendance_id=attendance_id,
+        decision=decision,
+        reason=reason
+    )
+
+    return jsonify({
+        "success": success,
+        "message": message
+    }), (200 if success else 400)
+
+
+@customer.route("/attendance/page", methods=["GET"])
+@role_required("CUSTOMER")
+def customer_attendance_page():
+    """Render the customer attendance review page."""
+    return render_template("customer/attendance.html")
