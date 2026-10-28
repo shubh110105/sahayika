@@ -400,3 +400,28 @@ def get_my_assignments():
 def my_assignments_page():
     """Render the maid assignments page."""
     return render_template("maid/assignments.html")
+
+
+@maid.route("/employments/active", methods=["GET"])
+@role_required("MAID")
+def maid_active_employments_route():
+    """Return active employments belonging to the logged-in maid."""
+    from app.models.maid_employment_model import (
+        get_maid_active_employments
+    )
+
+    maid_id = session.get("user_id")
+    employments = get_maid_active_employments(maid_id)
+
+    return jsonify({
+        "success": True,
+        "employments": employments
+    }), 200
+
+
+
+@maid.route("/employments/active/page", methods=["GET"])
+@role_required("MAID")
+def maid_active_employments_page():
+    """Render the logged-in maid's active employment page."""
+    return render_template("maid/active_employments.html")
