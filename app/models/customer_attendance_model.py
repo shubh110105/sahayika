@@ -103,3 +103,36 @@ def confirm_customer_attendance(customer_id, attendance_id, decision, reason=Non
         return execute_transaction(transaction)
     except ValueError as exc:
         return False, str(exc)
+
+
+def get_customer_attendance_disputes(customer_id):
+    """Return attendance disputes belonging to the logged-in customer."""
+
+    query = """
+        SELECT
+            d.dispute_id,
+            d.attendance_id,
+            d.customer_reason,
+            d.maid_response,
+            d.admin_decision,
+            d.status AS dispute_status,
+            d.created_at,
+            d.resolved_at,
+            a.attendance_date,
+            a.status AS attendance_status,
+            a.customer_confirmation,
+            e.employment_id,
+            e.maid_id,
+            maid_user.full_name AS maid_name
+        FROM attendance_disputes d
+        JOIN attendance a
+            ON a.attendance_id = d.attendance_id
+        JOIN employments e
+            ON e.employment_id = a.employment_id
+        JOIN users maid_user
+            ON maid_user.user_id = e.maid_id
+        WHERE e.customer_id = %s
+        ORDER BY d.created_at DESC, d.dispute_id DESC
+    """
+
+    return fetch_all(query, (customer_id,))

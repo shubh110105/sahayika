@@ -222,3 +222,28 @@ def review_customer_attendance_route(attendance_id):
 def customer_attendance_page():
     """Render the customer attendance review page."""
     return render_template("customer/attendance.html")
+
+
+@customer.route("/attendance/disputes/page", methods=["GET"])
+@role_required("CUSTOMER")
+def customer_attendance_disputes_page():
+    """Render the customer attendance disputes page."""
+    return render_template("customer/attendance_disputes.html")
+
+
+@customer.route("/attendance/disputes", methods=["GET"])
+@role_required("CUSTOMER")
+def customer_attendance_disputes_route():
+    """Return attendance disputes for the logged-in customer."""
+
+    from app.models.customer_attendance_model import (
+        get_customer_attendance_disputes
+    )
+
+    customer_id = session.get("user_id")
+    disputes = get_customer_attendance_disputes(customer_id)
+
+    return jsonify({
+        "success": True,
+        "disputes": disputes
+    }), 200
