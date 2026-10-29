@@ -477,6 +477,7 @@ def admin_attendance_disputes_page():
 
 
 
+
 @admin.route(
     "/attendance/disputes/<int:dispute_id>/decide",
     methods=["POST"]
@@ -495,15 +496,18 @@ def admin_decide_attendance_dispute_route(dispute_id):
 
     decision = data.get("decision")
     reason = data.get("reason")
+    attendance_outcome = data.get("attendance_outcome")
 
     success, message = decide_attendance_dispute(
         admin_id=admin_id,
         dispute_id=dispute_id,
         decision=decision,
-        reason=reason
+        reason=reason,
+        attendance_outcome=attendance_outcome
     )
 
     return jsonify({
         "success": success,
         "message": message
     }), 200 if success else 400
+
