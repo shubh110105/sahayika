@@ -449,7 +449,11 @@ def active_employments_page():
     """Render the Admin Active Employments page."""
     return render_template("admin/active_employments.html")
 
-
+@admin.route("/payroll/page", methods=["GET"])
+@role_required("ADMIN")
+def admin_payroll_page():
+    """Render the Admin Payroll page."""
+    return render_template("admin/payroll.html")
 
 @admin.route("/attendance/disputes", methods=["GET"])
 @role_required("ADMIN")
@@ -511,3 +515,208 @@ def admin_decide_attendance_dispute_route(dispute_id):
         "message": message
     }), 200 if success else 400
 
+@admin.route("/salary-records/generate", methods=["POST"])
+@role_required("ADMIN")
+def generate_salary_record_route():
+    """Generate a draft monthly salary record for an active employment."""
+
+    from datetime import date
+    from app.models.admin_salary_model import generate_monthly_salary
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "success": False,
+            "message": "A valid JSON request body is required."
+        }), 400
+
+    employment_id = data.get("employment_id")
+    salary_month_value = data.get("salary_month")
+
+    if (
+        isinstance(employment_id, bool)
+        or not isinstance(employment_id, int)
+        or employment_id <= 0
+    ):
+        return jsonify({
+            "success": False,
+            "message": "A valid positive employment_id is required."
+        }), 400
+
+    try:
+        salary_month = date.fromisoformat(salary_month_value)
+    except (TypeError, ValueError):
+        return jsonify({
+            "success": False,
+            "message": "salary_month must be a valid date in YYYY-MM-DD format."
+        }), 400
+
+    success, message, salary_id = generate_monthly_salary(
+        employment_id=employment_id,
+        salary_month=salary_month
+    )
+
+    if not success:
+        return jsonify({
+            "success": False,
+            "message": message
+        }), 400
+
+    return jsonify({
+        "success": True,
+        "message": message,
+        "salary_id": salary_id,
+        "status": "DRAFT"
+    }), 201
+
+@admin.route("/salary-records/<int:salary_id>/adjustments", methods=["POST"])
+@role_required("ADMIN")
+def update_salary_adjustments_route(salary_id):
+    """Update adjustments on a draft salary record."""
+
+    from decimal import Decimal, InvalidOperation
+    from app.models.admin_salary_model import update_draft_salary_adjustments
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "success": False,
+            "message": "A valid JSON request body is required."
+        }), 400
+
+    def parse_amount(field_name):
+        value = data.get(field_name, 0)
+
+        if isinstance(value, bool):
+            raise ValueError(f"{field_name} must be a valid amount.")
+
+        try:
+            amount = Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            raise ValueError(f"{field_name} must be a valid amount.")
+
+        if not amount.is_finite():
+            raise ValueError(f"{field_name} must be a finite amount.")
+
+        return amount
+
+    try:
+        attendance_adjustment = parse_amount("attendance_adjustment")
+        leave_adjustment = parse_amount("leave_adjustment")
+        other_adjustment = parse_amount("other_adjustment")
+    except ValueError as exc:
+        return jsonify({
+            "success": False,
+            "message": str(exc)
+        }), 400
+
+    other_adjustment_reason = data.get("other_adjustment_reason")
+
+    success, message = update_draft_salary_adjustments(
+        salary_id=salary_id,
+        attendance_adjustment=attendance_adjustment,
+        leave_adjustment=leave_adjustment,
+        other_adjustment=other_adjustment,
+        other_adjustment_reason=other_adjustment_reason
+    )
+
+    if not success:
+        return jsonify({
+            "success": False,
+            "message": message
+        }), 400
+
+    return jsonify({
+        "success": True,
+        "message": message
+    }), 200
+
+@admin.route("/salary-records/<int:salary_id>/finalize", methods=["POST"])
+@role_required("ADMIN")
+def finalize_salary_record_route(salary_id):
+    """Finalize a draft salary record."""
+
+    from app.models.admin_salary_model import finalize_salary_record
+
+    success, message = finalize_salary_record(salary_id)
+
+    if not success:
+        return jsonify({
+            "success": False,
+            "message": message
+        }), 400
+
+    return jsonify({
+        "success": True,
+        "message": message,
+        "salary_id": salary_id,
+        "status": "FINALIZED"
+    }), 200
+
+
+@admin.route("/salary-records/<int:salary_id>/payment", methods=["POST"])
+@role_required("ADMIN")
+def record_salary_payment_route(salary_id):
+    """Record payment for a finalized salary record."""
+
+    from datetime import date
+    from app.models.payment_model import record_salary_payment
+
+    data = request.get_json(silent=True)
+
+    if not isinstance(data, dict):
+        return jsonify({
+            "success": False,
+            "message": "A valid JSON request body is required."
+        }), 400
+
+    payment_date_value = data.get("payment_date")
+    remarks = data.get("remarks")
+
+    if payment_date_value:
+        try:
+            payment_date = date.fromisoformat(payment_date_value)
+        except (TypeError, ValueError):
+            return jsonify({
+                "success": False,
+                "message": "payment_date must be in YYYY-MM-DD format."
+            }), 400
+    else:
+        payment_date = date.today()
+
+    if remarks is not None and not isinstance(remarks, str):
+        return jsonify({
+            "success": False,
+            "message": "Remarks must be text."
+        }), 400
+
+    recorded_by = session.get("user_id")
+
+    if recorded_by is None:
+        return jsonify({
+            "success": False,
+            "message": "Admin session is missing. Please log in again."
+        }), 401
+
+    success, message, payment_id = record_salary_payment(
+        salary_id=salary_id,
+        recorded_by=recorded_by,
+        payment_date=payment_date,
+        remarks=remarks
+    )
+
+    if not success:
+        return jsonify({
+            "success": False,
+            "message": message
+        }), 400
+
+    return jsonify({
+        "success": True,
+        "message": message,
+        "salary_id": salary_id,
+        "payment_id": payment_id,
+        "status": "PAID"
+    }), 201

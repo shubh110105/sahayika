@@ -247,3 +247,38 @@ def customer_attendance_disputes_route():
         "success": True,
         "disputes": disputes
     }), 200
+
+
+@customer.route("/salary", methods=["GET"])
+@role_required("CUSTOMER")
+def customer_salary_route():
+    """Return finalized salary records for the logged-in customer."""
+
+    from app.models.customer_salary_model import (
+        get_customer_salary_records
+    )
+
+    customer_id = session.get("user_id")
+
+    try:
+        salary_records = get_customer_salary_records(customer_id)
+
+        return jsonify({
+            "success": True,
+            "salary_records": salary_records or []
+        }), 200
+
+    except Exception:
+        import logging
+        logging.exception("Failed to load customer salary records")
+
+        return jsonify({
+            "success": False,
+            "message": "Unable to load salary records."
+        }), 500
+
+@customer.route("/salary/page", methods=["GET"])
+@role_required("CUSTOMER")
+def customer_salary_page():
+    """Render the customer's salary history page."""
+    return render_template("customer/salary.html")
