@@ -1,0 +1,457 @@
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>MaidMate - Admin Payroll</title>
+
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+</head>
+
+<body>
+
+<div class="container mt-4">
+
+    <h2>Monthly Payroll</h2>
+
+    <p class="text-muted">
+        Generate draft salaries, review adjustments, and finalize monthly payroll.
+    </p>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            Generate Draft Salary
+        </div>
+
+        <div class="card-body">
+            <form id="generateSalaryForm">
+
+                <div class="mb-3">
+                    <label for="employmentId" class="form-label">
+                        Employment ID
+                    </label>
+
+                    <input
+                        type="number"
+                        class="form-control"
+                        id="employmentId"
+                        min="1"
+                        required
+                    >
+                </div>
+
+                <div class="mb-3">
+                    <label for="salaryMonth" class="form-label">
+                        Salary Month
+                    </label>
+
+                    <input
+                        type="month"
+                        class="form-control"
+                        id="salaryMonth"
+                        required
+                    >
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    Generate Draft
+                </button>
+
+            </form>
+
+            <div id="generateMessage" class="mt-3"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            Salary Record
+        </div>
+
+        <div class="card-body">
+            <form id="salaryRecordForm">
+
+                <div class="mb-3">
+                    <label for="salaryId" class="form-label">
+                        Salary Record ID
+                    </label>
+
+                    <input
+                        type="number"
+                        class="form-control"
+                        id="salaryId"
+                        min="1"
+                        required
+                    >
+                </div>
+
+                <h5>Adjustments</h5>
+
+                <p class="text-muted">
+                    Use negative amounts for deductions and positive amounts
+                    for additions. Only enter Admin-approved adjustments.
+                </p>
+
+                <div class="mb-3">
+                    <label for="attendanceAdjustment" class="form-label">
+                        Attendance Adjustment (₹)
+                    </label>
+
+                    <input
+                        type="number"
+                        step="0.01"
+                        class="form-control"
+                        id="attendanceAdjustment"
+                        value="0"
+                        required
+                    >
+                </div>
+
+                <div class="mb-3">
+                    <label for="leaveAdjustment" class="form-label">
+                        Leave Adjustment (₹)
+                    </label>
+
+                    <input
+                        type="number"
+                        step="0.01"
+                        class="form-control"
+                        id="leaveAdjustment"
+                        value="0"
+                        required
+                    >
+                </div>
+
+                <div class="mb-3">
+                    <label for="otherAdjustment" class="form-label">
+                        Other Adjustment (₹)
+                    </label>
+
+                    <input
+                        type="number"
+                        step="0.01"
+                        class="form-control"
+                        id="otherAdjustment"
+                        value="0"
+                        required
+                    >
+                </div>
+
+                <div class="mb-3">
+                    <label for="otherAdjustmentReason" class="form-label">
+                        Reason for Other Adjustment
+                    </label>
+
+                    <textarea
+                        class="form-control"
+                        id="otherAdjustmentReason"
+                        rows="2"
+                    ></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-warning">
+                    Save Adjustments
+                </button>
+
+                <button
+                    type="button"
+                    id="finalizeSalaryButton"
+                    class="btn btn-success ms-2"
+                >
+                    Finalize Salary
+                </button>
+
+            </form>
+
+            <div id="salaryRecordMessage" class="mt-3"></div>
+            <hr class="my-4">
+
+            <h5>Record Salary Payment</h5>
+
+            <p class="text-muted">
+                Record payment only after the salary has been finalized and payment has been made.
+            </p>
+
+            <form id="paymentForm">
+                <div class="mb-3">
+                    <label for="paymentSalaryId" class="form-label">
+                        Salary Record ID
+                    </label>
+                    <input
+                        type="number"
+                        class="form-control"
+                        id="paymentSalaryId"
+                        min="1"
+                        required
+                    >
+                </div>
+
+                <div class="mb-3">
+                    <label for="paymentDate" class="form-label">
+                        Payment Date
+                    </label>
+                    <input
+                        type="date"
+                        class="form-control"
+                        id="paymentDate"
+                        required
+                    >
+                </div>
+
+                <div class="mb-3">
+                    <label for="paymentRemarks" class="form-label">
+                        Remarks
+                    </label>
+                    <textarea
+                        class="form-control"
+                        id="paymentRemarks"
+                        rows="2"
+                        placeholder="Optional payment reference or remarks"
+                    ></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    Record Payment
+                </button>
+            </form>
+
+            <div id="paymentMessage" class="mt-3"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+const generateSalaryForm = document.getElementById("generateSalaryForm");
+const salaryRecordForm = document.getElementById("salaryRecordForm");
+
+function showMessage(elementId, message, success) {
+    const element = document.getElementById(elementId);
+
+    element.textContent = message;
+    element.className = success
+        ? "alert alert-success mt-3"
+        : "alert alert-danger mt-3";
+}
+
+generateSalaryForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    const employmentId = Number(
+        document.getElementById("employmentId").value
+    );
+
+    const monthValue = document.getElementById("salaryMonth").value;
+
+    if (!monthValue) {
+        showMessage("generateMessage", "Select a salary month.", false);
+        return;
+    }
+
+    const salaryMonth = `${monthValue}-01`;
+
+    try {
+        const response = await fetch("/admin/salary-records/generate", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                employment_id: employmentId,
+                salary_month: salaryMonth
+            })
+        });
+
+        const result = await response.json();
+
+        showMessage(
+            "generateMessage",
+            result.message,
+            response.ok
+        );
+
+        if (response.ok && result.salary_id) {
+            document.getElementById("salaryId").value = result.salary_id;
+        }
+    } catch (error) {
+        showMessage(
+            "generateMessage",
+            "Could not connect to the server.",
+            false
+        );
+    }
+});
+
+salaryRecordForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    const salaryId = Number(
+        document.getElementById("salaryId").value
+    );
+
+    const payload = {
+        attendance_adjustment: Number(
+            document.getElementById("attendanceAdjustment").value
+        ),
+        leave_adjustment: Number(
+            document.getElementById("leaveAdjustment").value
+        ),
+        other_adjustment: Number(
+            document.getElementById("otherAdjustment").value
+        ),
+        other_adjustment_reason: document
+            .getElementById("otherAdjustmentReason")
+            .value.trim()
+    };
+
+    try {
+        const response = await fetch(
+            `/admin/salary-records/${salaryId}/adjustments`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            }
+        );
+
+        const result = await response.json();
+
+        showMessage(
+            "salaryRecordMessage",
+            result.message,
+            response.ok
+        );
+    } catch (error) {
+        showMessage(
+            "salaryRecordMessage",
+            "Could not connect to the server.",
+            false
+        );
+    }
+});
+
+document.getElementById("finalizeSalaryButton")
+    .addEventListener("click", async function () {
+        const salaryId = Number(
+            document.getElementById("salaryId").value
+        );
+
+        if (!salaryId) {
+            showMessage(
+                "salaryRecordMessage",
+                "Enter a salary record ID first.",
+                false
+            );
+            return;
+        }
+
+        const confirmed = window.confirm(
+            "Finalize this salary record? Adjustments will be locked."
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            const response = await fetch(
+                `/admin/salary-records/${salaryId}/finalize`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({})
+                }
+            );
+
+            const result = await response.json();
+
+            showMessage(
+                "salaryRecordMessage",
+                result.message,
+                response.ok
+            );
+        } catch (error) {
+            showMessage(
+                "salaryRecordMessage",
+                "Could not connect to the server.",
+                false
+            );
+        }
+    });
+    const paymentForm = document.getElementById("paymentForm");
+
+paymentForm.addEventListener("submit", async function (event) {
+    event.preventDefault();
+
+    const salaryId = Number(
+        document.getElementById("paymentSalaryId").value
+    );
+
+    const paymentDate = document.getElementById("paymentDate").value;
+    const remarks = document.getElementById("paymentRemarks").value.trim();
+
+    if (!salaryId || !paymentDate) {
+        showMessage(
+            "paymentMessage",
+            "Enter the salary record ID and payment date.",
+            false
+        );
+        return;
+    }
+
+    const confirmed = window.confirm(
+        "Record this salary as paid? Make sure payment has actually been made."
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch(
+            `/admin/salary-records/${salaryId}/payment`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    payment_date: paymentDate,
+                    remarks: remarks
+                })
+            }
+        );
+
+        const result = await response.json();
+
+        showMessage(
+            "paymentMessage",
+            result.message,
+            response.ok
+        );
+
+        if (response.ok) {
+            paymentForm.reset();
+        }
+    } catch (error) {
+        showMessage(
+            "paymentMessage",
+            "Could not connect to the server.",
+            false
+        );
+    }
+});
+</script>
+
+</body>
+</html>
