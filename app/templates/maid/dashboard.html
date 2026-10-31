@@ -9,12 +9,21 @@
 
 <body>
 
+
 <nav class="navbar navbar-dark bg-success">
     <div class="container">
         <span class="navbar-brand">MaidMate</span>
-        <span class="text-white">Maid Dashboard</span>
+
+        <div class="d-flex align-items-center gap-3">
+            <span class="text-white">Maid Dashboard</span>
+            <button type="button" class="btn btn-light btn-sm"
+                    onclick="logoutUser()">
+                Logout
+            </button>
+        </div>
     </div>
 </nav>
+
 
 <div class="container mt-5">
 
@@ -113,5 +122,6 @@
 
 </div>
 
-
-</body></html>
+<script src="{{ url_for('static', filename='js/logout.js') }}"></script>
+</body>
+</html>
