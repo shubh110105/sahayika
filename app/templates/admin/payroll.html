@@ -21,7 +21,7 @@
     <h2>Monthly Payroll</h2>
 
     <p class="text-muted">
-        Generate draft salaries, review adjustments, and finalize monthly payroll.
+        Generate draft salaries, review adjustments, finalize payroll, and review payment history.
     </p>
         <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -40,18 +40,27 @@
                 Loading salary records...
             </div>
 
+            <div class="row g-3 mb-3" id="payrollSummary">
+                <div class="col-md-4"><div class="border rounded p-3 h-100"><div class="text-muted small">Paid Total (visible records)</div><div class="fs-5 fw-semibold" id="paidTotal">₹0.00</div></div></div>
+                <div class="col-md-4"><div class="border rounded p-3 h-100"><div class="text-muted small">Pending / Not Recorded (visible records)</div><div class="fs-5 fw-semibold" id="pendingTotal">₹0.00</div></div></div>
+                <div class="col-md-4"><div class="border rounded p-3 h-100"><div class="text-muted small">Visible Salary Records</div><div class="fs-5 fw-semibold" id="visibleSalaryCount">0</div></div></div>
+            </div>
+
             <div class="table-responsive">
                 <table class="table table-bordered table-striped align-middle">
                     <thead>
                         <tr>
                             <th>Salary ID</th>
                             <th>Employment ID</th>
+                            <th>Maid</th>
                             <th>Salary Month</th>
                             <th>Base Salary</th>
                             <th>Final Salary</th>
                             <th>Salary Status</th>
                             <th>Payment Status</th>
                             <th>Payment Date</th>
+                            <th>Payment Remarks</th>
+                            <th>Recorded By</th>
                         </tr>
                     </thead>
                     <tbody id="salaryRecordsTableBody">
@@ -113,15 +122,13 @@
 
         <div class="card-body">
             <div class="row g-2 mb-3">
-    <div class="col-md-6">
-        <input
-            type="text"
-            id="salarySearchInput"
-            class="form-control"
-            placeholder="Search by salary ID, employment ID, or month"
-        >
+    <div class="col-md-4">
+        <input type="text" id="salarySearchInput" class="form-control"
+            placeholder="Search salary ID, employment ID, maid, or month">
     </div>
-
+    <div class="col-md-3">
+        <input type="month" id="salaryMonthFilter" class="form-control" aria-label="Filter by salary month">
+    </div>
     <div class="col-md-3">
         <select id="paymentStatusFilter" class="form-select">
             <option value="">All Payment Statuses</option>
@@ -286,54 +293,78 @@
 <script>
 const generateSalaryForm = document.getElementById("generateSalaryForm");
 const salaryRecordForm = document.getElementById("salaryRecordForm");
-function filterSalaryRecords() {
-    const searchValue = document
-        .getElementById("salarySearchInput")
-        .value.trim()
-        .toLowerCase();
+let salaryRecordsCache = [];
 
-    const paymentStatus = document
-        .getElementById("paymentStatusFilter")
-        .value;
-
-    const rows = document.querySelectorAll(
-        "#salaryRecordsTableBody tr"
-    );
-
-    rows.forEach(row => {
-        const salaryId = row.cells[0]?.textContent.trim().toLowerCase();
-        const employmentId = row.cells[1]?.textContent.trim().toLowerCase();
-        const salaryMonth = row.cells[2]?.textContent.trim().toLowerCase();
-        const rowPaymentStatus = (row.cells[6]?.textContent || "")
-            .replace(/\\s+/g, " ")
-            .trim()
-            .toUpperCase();
-
-        const matchesSearch =
-            salaryId.includes(searchValue) ||
-            employmentId.includes(searchValue) ||
-            salaryMonth.includes(searchValue);
-
-        const selectedPaymentStatus = paymentStatus
-            .replace(/\\s+/g, " ")
-            .trim()
-            .toUpperCase();
-
-        const matchesPaymentStatus =
-            !selectedPaymentStatus ||
-            rowPaymentStatus === selectedPaymentStatus;
-        row.style.display =
-            matchesSearch && matchesPaymentStatus ? "" : "none";
-    });
+function money(value) {
+    const amount = Number(value || 0);
+    return `₹${amount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-document
-    .getElementById("salarySearchInput")
-    .addEventListener("input", filterSalaryRecords);
+// Accept SQL DATE strings and ISO timestamps without allowing malformed values
+// such as "Invalid Date" to leak into the table.
+function formatPayrollDate(value, options = {}) {
+    if (value === null || value === undefined || value === "") return "-";
+    const raw = String(value).trim();
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        const date = new Date(year, month - 1, day, 12, 0, 0);
+        if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return "-";
+        return date.toLocaleDateString("en-IN", options);
+    }
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("en-IN", options);
+}
 
-document
-    .getElementById("paymentStatusFilter")
-    .addEventListener("change", filterSalaryRecords);
+function normalizeDateKey(value) {
+    if (value === null || value === undefined || value === "") return "";
+    const raw = String(value).trim();
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}`;
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? "" : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function filterSalaryRecords() {
+    const searchValue = document.getElementById("salarySearchInput").value.trim().toLowerCase();
+    const paymentStatus = document.getElementById("paymentStatusFilter").value.trim().toUpperCase();
+    const monthValue = document.getElementById("salaryMonthFilter").value;
+    const rows = document.querySelectorAll("#salaryRecordsTableBody tr");
+    let paidTotal = 0;
+    let pendingTotal = 0;
+    let visibleCount = 0;
+
+    rows.forEach(row => {
+        const searchable = row.dataset.search || "";
+        const rowStatus = (row.dataset.paymentStatus || "").toUpperCase();
+        const rowMonth = row.dataset.salaryMonth || "";
+        const matchesSearch = searchable.includes(searchValue);
+        const matchesStatus = !paymentStatus ||
+            (paymentStatus === "PENDING" ? rowStatus !== "PAID" : rowStatus === paymentStatus);
+        const matchesMonth = !monthValue || rowMonth.startsWith(monthValue);
+        const visible = matchesSearch && matchesStatus && matchesMonth;
+        row.style.display = visible ? "" : "none";
+
+        if (visible) {
+            visibleCount += 1;
+            const finalSalary = Number(row.dataset.finalSalary || 0);
+            if (rowStatus === "PAID") paidTotal += finalSalary;
+            else pendingTotal += finalSalary;
+        }
+    });
+
+    document.getElementById("paidTotal").textContent = money(paidTotal);
+    document.getElementById("pendingTotal").textContent = money(pendingTotal);
+    document.getElementById("visibleSalaryCount").textContent = visibleCount;
+}
+
+["salarySearchInput", "paymentStatusFilter", "salaryMonthFilter"].forEach(id => {
+    const control = document.getElementById(id);
+    control.addEventListener(id === "salarySearchInput" ? "input" : "change", filterSalaryRecords);
+});
+
 async function loadSalaryRecords() {
     const tableBody = document.getElementById("salaryRecordsTableBody");
     const message = document.getElementById("salaryRecordsMessage");
@@ -351,9 +382,12 @@ async function loadSalaryRecords() {
         }
 
         const records = result.salary_records || [];
+        salaryRecordsCache = records;
+        tableBody.innerHTML = "";
 
         if (records.length === 0) {
             message.textContent = "No salary records found.";
+            filterSalaryRecords();
             return;
         }
 
@@ -361,60 +395,48 @@ async function loadSalaryRecords() {
 
         records.forEach(record => {
             const row = document.createElement("tr");
+            const rawMonth = record.salary_month ? String(record.salary_month).trim() : "";
+            const salaryMonth = formatPayrollDate(rawMonth, { month: "short", year: "numeric" });
+            const rawPaymentDate = record.payment_date ? String(record.payment_date).trim() : "";
+            const paymentDate = formatPayrollDate(rawPaymentDate);
+            const maidName = record.maid_name || "-";
+            const remarks = record.payment_remarks || "-";
+            const recordedBy = record.payment_recorded_by_name || record.payment_recorded_by || "-";
 
-            const salaryMonth = record.salary_month
-                ? new Date(record.salary_month).toLocaleDateString("en-IN", {
-                    month: "short",
-                    year: "numeric"
-                })
-                : "-";
-
-            const paymentDate = record.payment_date
-                ? new Date(record.payment_date).toLocaleDateString("en-IN")
-                : "-";
+            row.dataset.search = [record.salary_id, record.employment_id, maidName, rawMonth, salaryMonth].join(" ").toLowerCase();
+            row.dataset.paymentStatus = record.payment_status || "NOT RECORDED";
+            row.dataset.salaryMonth = normalizeDateKey(rawMonth);
+            row.dataset.finalSalary = Number(record.final_salary || 0);
 
             const values = [
-                record.salary_id,
-                record.employment_id,
-                salaryMonth,
-                `₹${Number(record.base_salary).toFixed(2)}`,
-                `₹${Number(record.final_salary).toFixed(2)}`,
-                record.salary_status,
-                record.payment_status,
-                paymentDate
+                record.salary_id, record.employment_id, maidName, salaryMonth,
+                money(record.base_salary), money(record.final_salary),
+                record.salary_status || "-", record.payment_status || "NOT RECORDED",
+                paymentDate, remarks, recordedBy
             ];
 
             values.forEach((value, index) => {
-                    const cell = document.createElement("td");
-
-                    if (index === 0) {
-                        const selectButton = document.createElement("button");
-
-                        selectButton.type = "button";
-                        selectButton.className = "btn btn-link btn-sm p-0";
-                        selectButton.textContent = value;
-                        selectButton.title = "Select this salary record";
-
-                        selectButton.addEventListener("click", function () {
-                            document.getElementById("salaryId").value = value;
-                            document.getElementById("paymentSalaryId").value = value;
-
-                            document.getElementById("salaryRecordForm").scrollIntoView({
-                                behavior: "smooth",
-                                block: "start"
-                            });
-                        });
-
-                        cell.appendChild(selectButton);
-                    } else {
-                        cell.textContent = value ?? "-";
-                    }
-
-                    row.appendChild(cell);
-                });
-
+                const cell = document.createElement("td");
+                if (index === 0) {
+                    const selectButton = document.createElement("button");
+                    selectButton.type = "button";
+                    selectButton.className = "btn btn-link btn-sm p-0";
+                    selectButton.textContent = value;
+                    selectButton.title = "Select this salary record";
+                    selectButton.addEventListener("click", function () {
+                        document.getElementById("salaryId").value = value;
+                        document.getElementById("paymentSalaryId").value = value;
+                        document.getElementById("salaryRecordForm").scrollIntoView({ behavior: "smooth", block: "start" });
+                    });
+                    cell.appendChild(selectButton);
+                } else {
+                    cell.textContent = value ?? "-";
+                }
+                row.appendChild(cell);
+            });
             tableBody.appendChild(row);
         });
+        filterSalaryRecords();
 
     } catch (error) {
         message.textContent = "Could not connect to the server.";
