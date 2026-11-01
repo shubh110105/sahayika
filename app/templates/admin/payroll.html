@@ -23,7 +23,44 @@
     <p class="text-muted">
         Generate draft salaries, review adjustments, and finalize monthly payroll.
     </p>
+        <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>Salary Records</span>
+            <button
+                type="button"
+                id="refreshSalaryRecordsButton"
+                class="btn btn-sm btn-outline-primary"
+            >
+                Refresh
+            </button>
+        </div>
 
+        <div class="card-body">
+            <div id="salaryRecordsMessage" class="text-muted mb-3">
+                Loading salary records...
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Salary ID</th>
+                            <th>Employment ID</th>
+                            <th>Salary Month</th>
+                            <th>Base Salary</th>
+                            <th>Final Salary</th>
+                            <th>Salary Status</th>
+                            <th>Payment Status</th>
+                            <th>Payment Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="salaryRecordsTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+     
     <div class="card mb-4">
         <div class="card-header">
             Generate Draft Salary
@@ -75,6 +112,25 @@
         </div>
 
         <div class="card-body">
+            <div class="row g-2 mb-3">
+    <div class="col-md-6">
+        <input
+            type="text"
+            id="salarySearchInput"
+            class="form-control"
+            placeholder="Search by salary ID, employment ID, or month"
+        >
+    </div>
+
+    <div class="col-md-3">
+        <select id="paymentStatusFilter" class="form-select">
+            <option value="">All Payment Statuses</option>
+            <option value="PAID">Paid</option>
+            <option value="PENDING">Pending</option>
+            <option value="NOT RECORDED">Not Recorded</option>
+        </select>
+    </div>
+</div>
             <form id="salaryRecordForm">
 
                 <div class="mb-3">
@@ -230,6 +286,146 @@
 <script>
 const generateSalaryForm = document.getElementById("generateSalaryForm");
 const salaryRecordForm = document.getElementById("salaryRecordForm");
+function filterSalaryRecords() {
+    const searchValue = document
+        .getElementById("salarySearchInput")
+        .value.trim()
+        .toLowerCase();
+
+    const paymentStatus = document
+        .getElementById("paymentStatusFilter")
+        .value;
+
+    const rows = document.querySelectorAll(
+        "#salaryRecordsTableBody tr"
+    );
+
+    rows.forEach(row => {
+        const salaryId = row.cells[0]?.textContent.trim().toLowerCase();
+        const employmentId = row.cells[1]?.textContent.trim().toLowerCase();
+        const salaryMonth = row.cells[2]?.textContent.trim().toLowerCase();
+        const rowPaymentStatus = (row.cells[6]?.textContent || "")
+            .replace(/\\s+/g, " ")
+            .trim()
+            .toUpperCase();
+
+        const matchesSearch =
+            salaryId.includes(searchValue) ||
+            employmentId.includes(searchValue) ||
+            salaryMonth.includes(searchValue);
+
+        const selectedPaymentStatus = paymentStatus
+            .replace(/\\s+/g, " ")
+            .trim()
+            .toUpperCase();
+
+        const matchesPaymentStatus =
+            !selectedPaymentStatus ||
+            rowPaymentStatus === selectedPaymentStatus;
+        row.style.display =
+            matchesSearch && matchesPaymentStatus ? "" : "none";
+    });
+}
+
+document
+    .getElementById("salarySearchInput")
+    .addEventListener("input", filterSalaryRecords);
+
+document
+    .getElementById("paymentStatusFilter")
+    .addEventListener("change", filterSalaryRecords);
+async function loadSalaryRecords() {
+    const tableBody = document.getElementById("salaryRecordsTableBody");
+    const message = document.getElementById("salaryRecordsMessage");
+
+    message.textContent = "Loading salary records...";
+    tableBody.innerHTML = "";
+
+    try {
+        const response = await fetch("/admin/salary-records");
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            message.textContent = result.message || "Could not load salary records.";
+            return;
+        }
+
+        const records = result.salary_records || [];
+
+        if (records.length === 0) {
+            message.textContent = "No salary records found.";
+            return;
+        }
+
+        message.textContent = `${records.length} salary record(s) found.`;
+
+        records.forEach(record => {
+            const row = document.createElement("tr");
+
+            const salaryMonth = record.salary_month
+                ? new Date(record.salary_month).toLocaleDateString("en-IN", {
+                    month: "short",
+                    year: "numeric"
+                })
+                : "-";
+
+            const paymentDate = record.payment_date
+                ? new Date(record.payment_date).toLocaleDateString("en-IN")
+                : "-";
+
+            const values = [
+                record.salary_id,
+                record.employment_id,
+                salaryMonth,
+                `₹${Number(record.base_salary).toFixed(2)}`,
+                `₹${Number(record.final_salary).toFixed(2)}`,
+                record.salary_status,
+                record.payment_status,
+                paymentDate
+            ];
+
+            values.forEach((value, index) => {
+                    const cell = document.createElement("td");
+
+                    if (index === 0) {
+                        const selectButton = document.createElement("button");
+
+                        selectButton.type = "button";
+                        selectButton.className = "btn btn-link btn-sm p-0";
+                        selectButton.textContent = value;
+                        selectButton.title = "Select this salary record";
+
+                        selectButton.addEventListener("click", function () {
+                            document.getElementById("salaryId").value = value;
+                            document.getElementById("paymentSalaryId").value = value;
+
+                            document.getElementById("salaryRecordForm").scrollIntoView({
+                                behavior: "smooth",
+                                block: "start"
+                            });
+                        });
+
+                        cell.appendChild(selectButton);
+                    } else {
+                        cell.textContent = value ?? "-";
+                    }
+
+                    row.appendChild(cell);
+                });
+
+            tableBody.appendChild(row);
+        });
+
+    } catch (error) {
+        message.textContent = "Could not connect to the server.";
+    }
+}
+
+document
+    .getElementById("refreshSalaryRecordsButton")
+    .addEventListener("click", loadSalaryRecords);
+
+loadSalaryRecords();
 
 function showMessage(elementId, message, success) {
     const element = document.getElementById(elementId);
@@ -278,6 +474,9 @@ generateSalaryForm.addEventListener("submit", async function (event) {
 
         if (response.ok && result.salary_id) {
             document.getElementById("salaryId").value = result.salary_id;
+            document.getElementById("paymentSalaryId").value = result.salary_id;
+
+            await loadSalaryRecords();
         }
     } catch (error) {
         showMessage(
@@ -329,6 +528,9 @@ salaryRecordForm.addEventListener("submit", async function (event) {
             result.message,
             response.ok
         );
+        if (response.ok) {
+    await loadSalaryRecords();
+}
     } catch (error) {
         showMessage(
             "salaryRecordMessage",
@@ -380,6 +582,9 @@ document.getElementById("finalizeSalaryButton")
                 result.message,
                 response.ok
             );
+            if (response.ok) {
+    await loadSalaryRecords();
+}
         } catch (error) {
             showMessage(
                 "salaryRecordMessage",
@@ -442,6 +647,7 @@ paymentForm.addEventListener("submit", async function (event) {
 
         if (response.ok) {
             paymentForm.reset();
+            await loadSalaryRecords();
         }
     } catch (error) {
         showMessage(
