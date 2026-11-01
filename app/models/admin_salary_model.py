@@ -2,7 +2,7 @@
 
 from datetime import date
 
-from app.database import execute_transaction
+from app.database import execute_transaction, fetch_all
 
 
 def generate_monthly_salary(employment_id, salary_month):
@@ -188,3 +188,27 @@ def finalize_salary_record(salary_id):
 
     except ValueError as exc:
         return False, str(exc)
+
+def get_all_salary_records():
+    """Return salary records with their associated payment status."""
+
+    query = """
+        SELECT
+            sr.salary_id,
+            sr.employment_id,
+            sr.salary_month,
+            sr.base_salary,
+            sr.attendance_adjustment,
+            sr.leave_adjustment,
+            sr.other_adjustment,
+            sr.final_salary,
+            sr.status AS salary_status,
+            COALESCE(pr.status, 'NOT RECORDED') AS payment_status,
+            pr.payment_date
+        FROM salary_records AS sr
+        LEFT JOIN payment_records AS pr
+            ON pr.salary_id = sr.salary_id
+        ORDER BY sr.salary_month DESC, sr.salary_id DESC
+    """
+
+    return fetch_all(query)

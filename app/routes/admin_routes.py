@@ -720,3 +720,23 @@ def record_salary_payment_route(salary_id):
         "payment_id": payment_id,
         "status": "PAID"
     }), 201
+
+
+@admin.route("/salary-records", methods=["GET"])
+@role_required("ADMIN")
+def all_salary_records_route():
+    from app.models.admin_salary_model import get_all_salary_records
+
+    try:
+        records = get_all_salary_records()
+        return jsonify({
+            "success": True,
+            "salary_records": records or []
+        }), 200
+
+    except Exception:
+        return jsonify({
+            "success": False,
+            "message": "Unable to load salary records."
+        }), 500
+
