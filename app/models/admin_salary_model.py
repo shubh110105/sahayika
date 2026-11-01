@@ -116,6 +116,7 @@ def update_draft_salary_adjustments(
                 attendance_adjustment = %s,
                 leave_adjustment = %s,
                 other_adjustment = %s,
+                other_adjustment_reason = %s,
                 final_salary = (
                     base_salary
                     + %s
@@ -123,12 +124,13 @@ def update_draft_salary_adjustments(
                     + %s
                 )
             WHERE salary_id = %s
-              AND status = 'DRAFT'
+            AND status = 'DRAFT'
             """,
             (
                 attendance_adjustment,
                 leave_adjustment,
                 other_adjustment,
+                other_adjustment_reason.strip() if other_adjustment_reason else None,
                 attendance_adjustment,
                 leave_adjustment,
                 other_adjustment,
@@ -203,11 +205,22 @@ def get_all_salary_records():
             sr.other_adjustment,
             sr.final_salary,
             sr.status AS salary_status,
+            sr.other_adjustment_reason,
             COALESCE(pr.status, 'NOT RECORDED') AS payment_status,
-            pr.payment_date
+            pr.payment_date,
+            pr.remarks AS payment_remarks,
+            pr.recorded_by AS payment_recorded_by,
+            admin_user.full_name AS payment_recorded_by_name,
+            maid_user.full_name AS maid_name
         FROM salary_records AS sr
         LEFT JOIN payment_records AS pr
             ON pr.salary_id = sr.salary_id
+        LEFT JOIN users AS admin_user
+            ON admin_user.user_id = pr.recorded_by
+        LEFT JOIN employments AS e
+            ON e.employment_id = sr.employment_id
+        LEFT JOIN users AS maid_user
+            ON maid_user.user_id = e.maid_id
         ORDER BY sr.salary_month DESC, sr.salary_id DESC
     """
 
