@@ -17,7 +17,9 @@ def confirm_maid_assignment(assignment_id, customer_id):
             SELECT
                 ma.assignment_id,
                 ma.status,
-                hr.customer_id
+                ma.requirement_id,
+                hr.customer_id,
+                hr.status
             FROM maid_assignments ma
             JOIN household_requirements hr
               ON hr.requirement_id = ma.requirement_id
@@ -33,7 +35,13 @@ def confirm_maid_assignment(assignment_id, customer_id):
             raise ValueError("Assignment not found.")
 
         # The transaction cursor returns tuples.
-        stored_assignment_id, current_status, requirement_customer_id = assignment
+        (
+            stored_assignment_id,
+            current_status,
+            requirement_id,
+            requirement_customer_id,
+            requirement_status,
+        ) = assignment
 
         if int(requirement_customer_id) != int(customer_id):
             raise ValueError(
@@ -44,6 +52,9 @@ def confirm_maid_assignment(assignment_id, customer_id):
             raise ValueError(
                 "Only an assignment accepted by the maid can be confirmed."
             )
+
+        if requirement_status != "MAID_ACCEPTED":
+            raise ValueError("Requirement status is inconsistent with this assignment.")
 
         cursor.execute(
             """
@@ -58,6 +69,18 @@ def confirm_maid_assignment(assignment_id, customer_id):
 
         if cursor.rowcount != 1:
             raise ValueError("Customer confirmation could not be saved.")
+
+        cursor.execute(
+            """
+            UPDATE household_requirements
+            SET status = 'CUSTOMER_CONFIRMED'
+            WHERE requirement_id = %s
+              AND status = 'MAID_ACCEPTED'
+            """,
+            (requirement_id,),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("Requirement status could not be updated after customer confirmation.")
 
         return True
 
