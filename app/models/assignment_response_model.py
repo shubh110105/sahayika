@@ -21,30 +21,49 @@ def respond_to_assignment(assignment_id, maid_id, decision):
     new_status = allowed_decisions[decision]
 
     def operation(cursor):
-        # Lock the assignment row to prevent simultaneous responses.
+        # Lock assignment and requirement together so their statuses transition atomically.
         cursor.execute(
             """
-            SELECT assignment_id, maid_id, status
-            FROM maid_assignments
-            WHERE assignment_id = %s
+            SELECT
+                ma.assignment_id,
+                ma.maid_id,
+                ma.status,
+                ma.requirement_id,
+                ma.previous_requirement_status,
+                hr.status
+            FROM maid_assignments ma
+            JOIN household_requirements hr
+              ON hr.requirement_id = ma.requirement_id
+            WHERE ma.assignment_id = %s
             FOR UPDATE
             """,
             (assignment_id,),
         )
 
         assignment = cursor.fetchone()
-
         if not assignment:
             raise ValueError("Assignment not found.")
 
-        # The transaction cursor returns tuples, not dictionaries.
-        stored_assignment_id, stored_maid_id, current_status = assignment
+        (
+            stored_assignment_id,
+            stored_maid_id,
+            current_status,
+            requirement_id,
+            previous_requirement_status,
+            requirement_status,
+        ) = assignment
 
         if int(stored_maid_id) != int(maid_id):
             raise ValueError("You are not authorized to respond to this assignment.")
 
         if current_status != "PENDING_MAID_RESPONSE":
             raise ValueError("This assignment has already been responded to or closed.")
+
+        if requirement_status != "WAITING_FOR_MAID":
+            raise ValueError("Requirement status is inconsistent with this assignment.")
+
+        if decision == "REJECT" and previous_requirement_status not in ("SUBMITTED", "UNDER_REVIEW"):
+            raise ValueError("The previous requirement status is missing or invalid.")
 
         cursor.execute(
             """
@@ -57,9 +76,23 @@ def respond_to_assignment(assignment_id, maid_id, decision):
             """,
             (new_status, stored_assignment_id, maid_id),
         )
-
         if cursor.rowcount != 1:
             raise ValueError("Assignment response could not be saved.")
+
+        next_requirement_status = (
+            "MAID_ACCEPTED" if decision == "ACCEPT" else previous_requirement_status
+        )
+        cursor.execute(
+            """
+            UPDATE household_requirements
+            SET status = %s
+            WHERE requirement_id = %s
+              AND status = 'WAITING_FOR_MAID'
+            """,
+            (next_requirement_status, requirement_id),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("Requirement status could not be updated after maid response.")
 
         return True
 
