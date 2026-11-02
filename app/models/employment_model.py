@@ -19,7 +19,8 @@ def finalize_assignment(assignment_id, admin_id):
                 ma.requirement_id,
                 ma.status,
                 hr.customer_id,
-                hr.estimated_monthly_salary
+                hr.estimated_monthly_salary,
+                hr.status
             FROM maid_assignments ma
             JOIN household_requirements hr
               ON hr.requirement_id = ma.requirement_id
@@ -40,12 +41,16 @@ def finalize_assignment(assignment_id, admin_id):
             current_status,
             customer_id,
             monthly_salary,
+            requirement_status,
         ) = assignment
 
         if current_status != "CUSTOMER_CONFIRMED":
             raise ValueError(
                 "Only customer-confirmed assignments can be finalized."
             )
+
+        if requirement_status != "CUSTOMER_CONFIRMED":
+            raise ValueError("Requirement status is inconsistent with this assignment.")
 
         if monthly_salary is None or float(monthly_salary) <= 0:
             raise ValueError(
@@ -96,6 +101,18 @@ def finalize_assignment(assignment_id, admin_id):
 
         if cursor.rowcount != 1:
             raise ValueError("Final Admin confirmation could not be saved.")
+
+        cursor.execute(
+            """
+            UPDATE household_requirements
+            SET status = 'ADMIN_CONFIRMED'
+            WHERE requirement_id = %s
+              AND status = 'CUSTOMER_CONFIRMED'
+            """,
+            (requirement_id,),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("Requirement status could not be updated after Admin confirmation.")
 
         # Create the active employment using the saved requirement salary.
         cursor.execute(
