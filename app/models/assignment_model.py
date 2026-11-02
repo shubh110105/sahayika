@@ -113,14 +113,31 @@ def create_maid_assignment(requirement_id, maid_id, admin_id):
                 requirement_id,
                 maid_id,
                 assigned_by,
-                status
+                status,
+                previous_requirement_status
             )
-            VALUES (%s, %s, %s, 'PENDING_MAID_RESPONSE')
+            VALUES (%s, %s, %s, 'PENDING_MAID_RESPONSE', %s)
             """,
-            (requirement_id, maid_id, admin_id),
+            (requirement_id, maid_id, admin_id, requirement_status),
         )
 
-        return cursor.lastrowid
+        assignment_id = cursor.lastrowid
+
+        # Keep the requirement lifecycle in sync within this transaction.
+        cursor.execute(
+            """
+            UPDATE household_requirements
+            SET status = 'WAITING_FOR_MAID'
+            WHERE requirement_id = %s
+              AND status = %s
+            """,
+            (requirement_id, requirement_status),
+        )
+
+        if cursor.rowcount != 1:
+            raise ValueError("Requirement status could not be updated for assignment.")
+
+        return assignment_id
 
     try:
         assignment_id = execute_transaction(operation)
