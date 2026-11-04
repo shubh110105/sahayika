@@ -1,7 +1,7 @@
 
 """Database queries for Admin assignment review."""
 
-from app.database import fetch_all
+from app.database import fetch_all, fetch_one
 
 
 def get_assignments_pending_admin_confirmation():
@@ -75,3 +75,13 @@ def get_assignments_pending_admin_confirmation():
     """
 
     return fetch_all(query)
+
+
+def get_assignment_maid_id(assignment_id):
+    """Return the maid_id of an assignment, or None if it does not exist."""
+    row = fetch_one(
+        "SELECT maid_id FROM maid_assignments WHERE assignment_id = %s",
+        (assignment_id,),
+    )
+
+    return int(row["maid_id"]) if row else None
