@@ -1,7 +1,7 @@
 
 """Database queries for Admin attendance dispute review."""
 
-from app.database import fetch_all
+from app.database import execute_transaction, fetch_all
 
 
 def get_all_attendance_disputes():
@@ -55,8 +55,6 @@ def decide_attendance_dispute(
     attendance_outcome
 ):
     """Record an Admin decision and its explicit attendance outcome."""
-
-    from app.database import execute_transaction
 
     if decision not in ("RESOLVED", "REJECTED"):
         return False, "Invalid decision. Choose RESOLVED or REJECTED."
