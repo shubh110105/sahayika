@@ -19,7 +19,7 @@ def generate_monthly_salary(employment_id, salary_month):
     def transaction(cursor):
         cursor.execute(
             """
-            SELECT employment_id, monthly_salary
+            SELECT employment_id, monthly_salary, start_date
             FROM employments
             WHERE employment_id = %s
               AND status = 'ACTIVE'
@@ -34,6 +34,18 @@ def generate_monthly_salary(employment_id, salary_month):
             raise ValueError("Active employment not found.")
 
         base_salary = employment[1]
+        start_date = employment[2]
+
+        # A salary can only be created for months that have started, and
+        # not for months before the employment began.
+        if salary_month > date.today().replace(day=1):
+            raise ValueError("Salary cannot be generated for a future month.")
+
+        if start_date is not None and salary_month < start_date.replace(day=1):
+            raise ValueError(
+                "Salary cannot be generated for a month before the "
+                "employment started."
+            )
 
         cursor.execute(
             """
