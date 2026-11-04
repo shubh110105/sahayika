@@ -1,4 +1,9 @@
-from app.database import fetch_one, fetch_all, execute_query
+from app.database import (
+    execute_query,
+    execute_update,
+    fetch_all,
+    fetch_one,
+)
 
 
 def get_latest_verification(maid_id):
@@ -37,7 +42,6 @@ def get_pending_verifications():
             mv.status,
             mv.remarks,
             mv.submitted_at,
-            mp.maid_id,
             u.full_name,
             u.email,
             u.phone,
@@ -80,6 +84,8 @@ def update_verification(
     remarks,
     admin_user_id
 ):
+    # "AND status = 'PENDING'" makes the review atomic: if two admins
+    # decide the same request at once, only the first update succeeds.
     query = """
         UPDATE maid_verifications
         SET
@@ -88,9 +94,12 @@ def update_verification(
             verified_at = CURRENT_TIMESTAMP,
             verified_by = %s
         WHERE verification_id = %s
+          AND status = 'PENDING'
     """
 
-    return execute_query(
+    affected_rows = execute_update(
         query,
         (status, remarks, admin_user_id, verification_id)
     )
+
+    return affected_rows == 1
