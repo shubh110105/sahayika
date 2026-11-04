@@ -1,9 +1,9 @@
 
 """Attendance operations for active maid employments."""
 
-from datetime import date, datetime
+from datetime import date
 
-from app.database import execute_transaction, fetch_all, fetch_one
+from app.database import execute_transaction, fetch_all
 
 
 def get_maid_attendance(maid_id):
@@ -47,6 +47,12 @@ def record_check_in(maid_id, employment_id, attendance_date=None):
     if not isinstance(attendance_date, date):
         return False, "Invalid attendance date.", None
 
+    # The check-in time is stamped by the server clock, so the attendance
+    # date must be today too; otherwise a maid could back-date or
+    # pre-date records.
+    if attendance_date != date.today():
+        return False, "Check-in is only allowed for today's date.", None
+
     def operation(cursor):
         # Lock and validate the employment.
         cursor.execute(
@@ -54,7 +60,8 @@ def record_check_in(maid_id, employment_id, attendance_date=None):
             SELECT
                 e.employment_id,
                 e.maid_id,
-                ma.requirement_id
+                ma.requirement_id,
+                e.start_date
             FROM employments e
             JOIN maid_assignments ma
                 ON ma.assignment_id = e.assignment_id
@@ -71,7 +78,10 @@ def record_check_in(maid_id, employment_id, attendance_date=None):
         if not employment:
             raise ValueError("Active employment not found for this maid.")
 
-        _, _, requirement_id = employment
+        _, _, requirement_id, start_date = employment
+
+        if start_date is not None and attendance_date < start_date:
+            raise ValueError("This employment has not started yet.")
 
         # Confirm the employment has a schedule on the requested weekday.
         weekday = attendance_date.strftime("%A").upper()
