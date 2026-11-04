@@ -1,3 +1,5 @@
+import logging
+
 from flask import Blueprint, request, jsonify, session, render_template
 
 from app.role_required import role_required
@@ -5,6 +7,17 @@ from app.services.customer_service import (
     get_customer_profile,
     save_customer_profile
 )
+from app.models.customer_assignment_list_model import get_customer_assignments
+from app.models.customer_assignment_model import confirm_maid_assignment
+from app.models.customer_attendance_model import (
+    confirm_customer_attendance,
+    get_customer_attendance,
+    get_customer_attendance_disputes,
+)
+from app.models.customer_employment_model import (
+    get_customer_active_employments,
+)
+from app.models.customer_salary_model import get_customer_salary_records
 
 
 customer = Blueprint(
@@ -36,9 +49,9 @@ def get_profile():
 @customer.route("/profile", methods=["POST"])
 @role_required("CUSTOMER")
 def save_profile():
-    data = request.get_json()
+    data = request.get_json(silent=True)
 
-    if not data:
+    if not isinstance(data, dict) or not data:
         return jsonify({
             "success": False,
             "message": "Request body is required."
@@ -75,7 +88,6 @@ def profile_page():
 def confirm_assignment(assignment_id):
     """Allow the requirement-owning customer to confirm an accepted assignment."""
 
-    from app.models.customer_assignment_model import confirm_maid_assignment
 
     customer_id = session.get("user_id")
 
@@ -104,8 +116,8 @@ def confirm_assignment(assignment_id):
             "status": "CUSTOMER_CONFIRMED"
         }), 200
 
-    except Exception as error:
-        print("CUSTOMER ASSIGNMENT CONFIRMATION ERROR:", repr(error))
+    except Exception:
+        logging.exception("CUSTOMER ASSIGNMENT CONFIRMATION ERROR")
         return jsonify({
             "success": False,
             "message": "Unable to confirm the assignment."
@@ -115,9 +127,6 @@ def confirm_assignment(assignment_id):
 @role_required("CUSTOMER")
 def get_my_assignments():
     """Return assignments belonging to the logged-in customer."""
-    from app.models.customer_assignment_list_model import (
-        get_customer_assignments
-    )
 
     customer_id = session.get("user_id")
 
@@ -130,7 +139,6 @@ def get_my_assignments():
         }), 200
 
     except Exception:
-        import logging
         logging.exception("Failed to load customer assignments")
 
         return jsonify({
@@ -149,9 +157,6 @@ def my_assignments_page():
 @role_required("CUSTOMER")
 def customer_active_employments_route():
     """Return active employments belonging to the logged-in customer."""
-    from app.models.customer_employment_model import (
-        get_customer_active_employments
-    )
 
     customer_id = session.get("user_id")
     employments = get_customer_active_employments(customer_id)
@@ -169,14 +174,10 @@ def customer_active_employments_page():
     return render_template("customer/active_employments.html")
 
 
-
 @customer.route("/attendance", methods=["GET"])
 @role_required("CUSTOMER")
 def customer_attendance_route():
     """Return attendance records for the logged-in customer."""
-    from app.models.customer_attendance_model import (
-        get_customer_attendance
-    )
 
     customer_id = session.get("user_id")
     records = get_customer_attendance(customer_id)
@@ -187,15 +188,11 @@ def customer_attendance_route():
     }), 200
 
 
-
 @customer.route("/attendance/<int:attendance_id>/review", methods=["POST"])
 @role_required("CUSTOMER")
 def review_customer_attendance_route(attendance_id):
     """Allow a customer to confirm or dispute attendance."""
 
-    from app.models.customer_attendance_model import (
-        confirm_customer_attendance
-    )
 
     data = request.get_json(silent=True) or {}
 
@@ -236,9 +233,6 @@ def customer_attendance_disputes_page():
 def customer_attendance_disputes_route():
     """Return attendance disputes for the logged-in customer."""
 
-    from app.models.customer_attendance_model import (
-        get_customer_attendance_disputes
-    )
 
     customer_id = session.get("user_id")
     disputes = get_customer_attendance_disputes(customer_id)
@@ -254,9 +248,6 @@ def customer_attendance_disputes_route():
 def customer_salary_route():
     """Return finalized salary records for the logged-in customer."""
 
-    from app.models.customer_salary_model import (
-        get_customer_salary_records
-    )
 
     customer_id = session.get("user_id")
 
@@ -269,7 +260,6 @@ def customer_salary_route():
         }), 200
 
     except Exception:
-        import logging
         logging.exception("Failed to load customer salary records")
 
         return jsonify({

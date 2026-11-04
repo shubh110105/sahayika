@@ -1,3 +1,6 @@
+import logging
+from datetime import date
+from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, jsonify, render_template, request, session
 from app.role_required import role_required
@@ -5,12 +8,36 @@ from app.role_required import role_required
 from app.models.requirement_model import (
     get_salary_review_requests,
     update_salary_review_decision,
-    reset_failed_salary_reassessment, # Restore failed reassessments to the queue.
-       get_submitted_requirements_for_admin, 
+    reset_failed_salary_reassessment,  # Restore failed reassessments to the queue.
+    get_submitted_requirements_for_admin,
 )
 
 # Import the service that recalculates and saves an estimate.
 from app.services.requirement_service import reassess_requirement_salary
+from app.services.eligibility_service import is_maid_eligible_for_assignment
+from app.models.active_employment_model import get_active_employments
+from app.models.admin_assignment_model import (
+    get_assignment_maid_id,
+    get_assignments_pending_admin_confirmation,
+)
+from app.models.admin_attendance_dispute_model import (
+    decide_attendance_dispute,
+    get_all_attendance_disputes,
+)
+from app.models.admin_salary_model import (
+    finalize_salary_record,
+    generate_monthly_salary,
+    get_all_salary_records,
+    update_draft_salary_adjustments,
+)
+from app.models.assignment_model import create_maid_assignment
+from app.models.employment_model import finalize_assignment
+from app.models.matching_model import get_maid_shortlist
+from app.models.payment_model import record_salary_payment
+from app.services.verification_service import (
+    list_pending_verifications,
+    review_verification,
+)
 
 admin = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -44,7 +71,6 @@ def salary_review_page():
 )
 @role_required("ADMIN")
 def submit_salary_review_decision(requirement_id):
-    from flask import request
 
     # Read the decision submitted by the Admin interface.
     data = request.get_json(silent=True)
@@ -84,7 +110,6 @@ def submit_salary_review_decision(requirement_id):
         if decision == "REASSESSMENT_REQUESTED":
             success, result = reassess_requirement_salary(requirement_id)
 
-            
             if not success:
                 # Reset the decision so the Admin can retry the failed reassessment.
                 reset_failed_salary_reassessment(requirement_id)
@@ -120,7 +145,6 @@ def submit_salary_review_decision(requirement_id):
         }), 500
 
 
-
 @admin.route(
     "/requirements/<int:requirement_id>/shortlist",
     methods=["GET"]
@@ -128,7 +152,6 @@ def submit_salary_review_decision(requirement_id):
 @role_required("ADMIN")
 def requirement_maid_shortlist(requirement_id):
     """Show eligible maid recommendations; this endpoint does not assign a maid."""
-    from app.models.matching_model import get_maid_shortlist
 
     try:
         requirement, candidates, message = get_maid_shortlist(requirement_id)
@@ -154,7 +177,6 @@ def requirement_maid_shortlist(requirement_id):
             "success": False,
             "message": "Unable to generate the maid shortlist."
         }), 500
-
 
 
 @admin.route("/requirements", methods=["GET"])
@@ -183,7 +205,6 @@ def submitted_requirements():
 def assign_maid_to_requirement(requirement_id):
     """Let an Admin manually select an eligible maid."""
 
-    from app.models.assignment_model import create_maid_assignment
 
     # Read the selected maid ID from the JSON request body.
     data = request.get_json(silent=True)
@@ -236,8 +257,8 @@ def assign_maid_to_requirement(requirement_id):
             "status": "PENDING_MAID_RESPONSE"
         }), 201
 
-    except Exception as error:
-        print("ASSIGNMENT CREATION ERROR:", repr(error))
+    except Exception:
+        logging.exception("ASSIGNMENT CREATION ERROR")
 
         # Keep internal details out of the API response.
         return jsonify({
@@ -246,7 +267,6 @@ def assign_maid_to_requirement(requirement_id):
         }), 500
 
 
-    
 @admin.route(
     "/assignments/<int:assignment_id>/confirm",
     methods=["POST"]
@@ -255,7 +275,6 @@ def assign_maid_to_requirement(requirement_id):
 def finalize_assignment_route(assignment_id):
     """Give final Admin confirmation and activate employment."""
 
-    from app.models.employment_model import finalize_assignment
 
     admin_id = session.get("user_id")
 
@@ -266,6 +285,23 @@ def finalize_assignment_route(assignment_id):
         }), 401
 
     try:
+        # The maid must still be eligible (active account, complete profile,
+        # latest verification VERIFIED); e.g. a maid suspended after
+        # accepting must not be activated.
+        assignment_maid_id = get_assignment_maid_id(assignment_id)
+
+        if assignment_maid_id is not None and not (
+            is_maid_eligible_for_assignment(assignment_maid_id)
+        ):
+            return jsonify({
+                "success": False,
+                "message": (
+                    "The maid is no longer eligible (account active, "
+                    "profile complete and verification VERIFIED are "
+                    "required)."
+                )
+            }), 400
+
         success, message, employment_id = finalize_assignment(
             assignment_id=assignment_id,
             admin_id=admin_id
@@ -286,8 +322,8 @@ def finalize_assignment_route(assignment_id):
             "employment_status": "ACTIVE"
         }), 200
 
-    except Exception as error:
-        print("FINAL ADMIN CONFIRMATION ERROR:", repr(error))
+    except Exception:
+        logging.exception("FINAL ADMIN CONFIRMATION ERROR")
         return jsonify({
             "success": False,
             "message": "Unable to finalize the assignment."
@@ -309,7 +345,6 @@ def requirement_maid_shortlist_page(requirement_id):
 @role_required("ADMIN")
 def pending_maid_verifications():
     """Return maid verification requests awaiting Admin review."""
-    from app.services.verification_service import list_pending_verifications
 
     try:
         verifications = list_pending_verifications()
@@ -333,7 +368,6 @@ def pending_maid_verifications():
 @role_required("ADMIN")
 def review_maid_verification(verification_id):
     """Allow an Admin to verify, reject, or suspend a pending request."""
-    from app.services.verification_service import review_verification
 
     data = request.get_json(silent=True)
 
@@ -394,14 +428,10 @@ def pending_maid_verifications_page():
     return render_template("admin/maid_verifications.html")
 
 
-
 @admin.route("/assignments/pending-confirmation", methods=["GET"])
 @role_required("ADMIN")
 def pending_admin_assignments():
     """List assignments awaiting final Admin confirmation."""
-    from app.models.admin_assignment_model import (
-        get_assignments_pending_admin_confirmation
-    )
 
     try:
         assignments = get_assignments_pending_admin_confirmation()
@@ -412,7 +442,6 @@ def pending_admin_assignments():
         }), 200
 
     except Exception:
-        import logging
         logging.exception(
             "Failed to load assignments awaiting Admin confirmation"
         )
@@ -433,7 +462,6 @@ def admin_assignments_page():
 @role_required("ADMIN")
 def active_employments_route():
     """Return active employment records for Admin review."""
-    from app.models.active_employment_model import get_active_employments
 
     employments = get_active_employments()
 
@@ -460,9 +488,6 @@ def admin_payroll_page():
 def admin_attendance_disputes_route():
     """Return attendance disputes for Admin review."""
 
-    from app.models.admin_attendance_dispute_model import (
-        get_all_attendance_disputes
-    )
 
     disputes = get_all_attendance_disputes()
 
@@ -472,14 +497,11 @@ def admin_attendance_disputes_route():
     }), 200
 
 
-
 @admin.route("/attendance/disputes/page", methods=["GET"])
 @role_required("ADMIN")
 def admin_attendance_disputes_page():
     """Render the Admin attendance disputes page."""
     return render_template("admin/attendance_disputes.html")
-
-
 
 
 @admin.route(
@@ -490,10 +512,6 @@ def admin_attendance_disputes_page():
 def admin_decide_attendance_dispute_route(dispute_id):
     """Resolve or reject an attendance dispute."""
 
-    from flask import request
-    from app.models.admin_attendance_dispute_model import (
-        decide_attendance_dispute
-    )
 
     admin_id = session.get("user_id")
     data = request.get_json(silent=True) or {}
@@ -520,8 +538,6 @@ def admin_decide_attendance_dispute_route(dispute_id):
 def generate_salary_record_route():
     """Generate a draft monthly salary record for an active employment."""
 
-    from datetime import date
-    from app.models.admin_salary_model import generate_monthly_salary
 
     data = request.get_json(silent=True)
 
@@ -575,8 +591,6 @@ def generate_salary_record_route():
 def update_salary_adjustments_route(salary_id):
     """Update adjustments on a draft salary record."""
 
-    from decimal import Decimal, InvalidOperation
-    from app.models.admin_salary_model import update_draft_salary_adjustments
 
     data = request.get_json(silent=True)
 
@@ -638,7 +652,6 @@ def update_salary_adjustments_route(salary_id):
 def finalize_salary_record_route(salary_id):
     """Finalize a draft salary record."""
 
-    from app.models.admin_salary_model import finalize_salary_record
 
     success, message = finalize_salary_record(salary_id)
 
@@ -661,8 +674,6 @@ def finalize_salary_record_route(salary_id):
 def record_salary_payment_route(salary_id):
     """Record payment for a finalized salary record."""
 
-    from datetime import date
-    from app.models.payment_model import record_salary_payment
 
     data = request.get_json(silent=True)
 
@@ -725,7 +736,6 @@ def record_salary_payment_route(salary_id):
 @admin.route("/salary-records", methods=["GET"])
 @role_required("ADMIN")
 def all_salary_records_route():
-    from app.models.admin_salary_model import get_all_salary_records
 
     try:
         records = get_all_salary_records()
@@ -739,4 +749,3 @@ def all_salary_records_route():
             "success": False,
             "message": "Unable to load salary records."
         }), 500
-

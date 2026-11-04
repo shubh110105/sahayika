@@ -9,9 +9,9 @@ auth = Blueprint("auth", __name__, url_prefix="/auth")
 
 @auth.route("/register", methods=["POST"])
 def register():
-    data = request.get_json()
+    data = request.get_json(silent=True)
 
-    if not data:
+    if not isinstance(data, dict) or not data:
         return jsonify({
             "success": False,
             "message": "Request body is required."
@@ -40,18 +40,20 @@ def register():
 
 @auth.route("/login", methods=["POST"])
 def login():
-    data = request.get_json()
+    data = request.get_json(silent=True)
 
-    if not data:
+    if not isinstance(data, dict) or not data:
         return jsonify({
             "success": False,
             "message": "Request body is required."
         }), 400
 
-    email = data.get("email", "").strip().lower()
-    password = data.get("password", "")
+    email = data.get("email")
+    password = data.get("password")
 
-    if not email or not password:
+    email = email.strip().lower() if isinstance(email, str) else ""
+
+    if not email or not isinstance(password, str) or not password:
         return jsonify({
             "success": False,
             "message": "Email and password are required."
@@ -88,6 +90,7 @@ def login():
         "user_id": user["user_id"],
         "role": user["role"]
     })
+
 
 @auth.route("/logout", methods=["POST"])
 def logout():

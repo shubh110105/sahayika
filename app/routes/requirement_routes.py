@@ -7,7 +7,6 @@ from app.services.requirement_service import (
     list_customer_requirements,
 )
 
-
 from app.models.requirement_model import (
     get_all_services,
     get_requirement_by_id,
@@ -19,24 +18,12 @@ from app.models.requirement_model import (
 )
 
 
-
 requirement = Blueprint("requirement", __name__, url_prefix="/requirements")
 
 
 @requirement.route("/", methods=["POST"])
+@role_required("CUSTOMER")
 def create_requirement():
-    if "user_id" not in session:
-        return jsonify({
-            "success": False,
-            "message": "Please log in first."
-        }), 401
-
-    if session.get("role") != "CUSTOMER":
-        return jsonify({
-            "success": False,
-            "message": "Only customers can create household requirements."
-        }), 403
-
     data = request.get_json(silent=True)
 
     if not isinstance(data, dict):
@@ -71,19 +58,8 @@ def create_requirement():
 
 
 @requirement.route("/", methods=["GET"])
+@role_required("CUSTOMER")
 def get_requirements():
-    if "user_id" not in session:
-        return jsonify({
-            "success": False,
-            "message": "Please log in first."
-        }), 401
-
-    if session.get("role") != "CUSTOMER":
-        return jsonify({
-            "success": False,
-            "message": "Only customers can view their requirements."
-        }), 403
-
     requirements = list_customer_requirements(session["user_id"])
 
     return jsonify({
@@ -92,19 +68,8 @@ def get_requirements():
     }), 200
 
 @requirement.route("/new", methods=["GET"])
+@role_required("CUSTOMER")
 def requirement_page():
-    if "user_id" not in session:
-        return jsonify({
-            "success": False,
-            "message": "Please log in first."
-        }), 401
-
-    if session.get("role") != "CUSTOMER":
-        return jsonify({
-            "success": False,
-            "message": "Only customers can access this page."
-        }), 403
-
     services = get_all_services()
 
     return render_template(
@@ -113,36 +78,14 @@ def requirement_page():
     )
 
 @requirement.route("/my", methods=["GET"])
+@role_required("CUSTOMER")
 def my_requirements_page():
-    if "user_id" not in session:
-        return jsonify({
-            "success": False,
-            "message": "Please log in first."
-        }), 401
-
-    if session.get("role") != "CUSTOMER":
-        return jsonify({
-            "success": False,
-            "message": "Only customers can access this page."
-        }), 403
-
     return render_template("customer/my_requirements.html")
 
 
 @requirement.route("/<int:requirement_id>", methods=["GET"])
+@role_required("CUSTOMER")
 def requirement_details_page(requirement_id):
-    if "user_id" not in session:
-        return jsonify({
-            "success": False,
-            "message": "Please log in first."
-        }), 401
-
-    if session.get("role") != "CUSTOMER":
-        return jsonify({
-            "success": False,
-            "message": "Only customers can view requirement details."
-        }), 403
-
     requirement_data = get_requirement_by_id(
         requirement_id,
         session["user_id"]
@@ -234,7 +177,6 @@ def cancel_requirement(requirement_id):
             "success": False,
             "message": "Unable to cancel the requirement."
         }), 500
-
 
 
 @requirement.route(

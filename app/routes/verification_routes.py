@@ -1,15 +1,13 @@
-from flask import Blueprint, jsonify, request, session, render_template
+from flask import Blueprint, jsonify, session
 
 from app.role_required import role_required
-from app.services.verification_service import (
-    submit_verification,
-    list_pending_verifications,
-    review_verification
-)
+from app.services.verification_service import submit_verification
 from app.models.maid_model import get_maid_profile
 from app.models.verification_model import get_latest_verification
 
 
+# Maid-facing verification endpoints. The Admin review screens live in
+# admin_routes.py (/admin/verifications...).
 verification = Blueprint(
     "verification",
     __name__,
@@ -47,40 +45,3 @@ def status():
         "success": True,
         "verification": record
     })
-
-
-@verification.route("/admin/pending", methods=["GET"])
-@role_required("ADMIN")
-def pending():
-    records = list_pending_verifications()
-
-    return jsonify({
-        "success": True,
-        "verifications": records
-    })
-
-
-@verification.route("/admin/<int:verification_id>/review", methods=["POST"])
-@role_required("ADMIN")
-def review(verification_id):
-    data = request.get_json(silent=True) or {}
-
-    status_value = data.get("status", "")
-    remarks = data.get("remarks", "")
-
-    success, message = review_verification(
-        verification_id=verification_id,
-        status=status_value,
-        remarks=remarks,
-        admin_user_id=session["user_id"]
-    )
-
-    return jsonify({
-        "success": success,
-        "message": message
-    }), 200 if success else 400
-
-@verification.route("/admin/page")
-@role_required("ADMIN")
-def admin_page():
-    return render_template("admin/verifications.html")

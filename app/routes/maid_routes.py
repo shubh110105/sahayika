@@ -1,8 +1,33 @@
+import logging
+from datetime import date, time
+
 from flask import Blueprint, request, jsonify, session, render_template
 
 from app.role_required import role_required
 from app.models.maid_model import get_maid_profile
 from app.services.maid_service import save_maid_profile
+from app.models.assignment_response_model import respond_to_assignment
+from app.models.attendance_model import (
+    get_maid_attendance,
+    record_check_in,
+    record_check_out,
+)
+from app.models.availability_model import (
+    add_maid_availability,
+    get_maid_availability,
+    update_maid_availability_status,
+)
+from app.models.maid_assignment_model import get_maid_assignments
+from app.models.maid_attendance_dispute_model import (
+    get_maid_attendance_disputes,
+    submit_maid_dispute_response,
+)
+from app.models.maid_employment_model import get_maid_active_employments
+from app.models.maid_service_model import (
+    get_all_services,
+    get_maid_services,
+    save_maid_services,
+)
 
 
 maid = Blueprint(
@@ -34,9 +59,9 @@ def get_profile():
 @maid.route("/profile", methods=["POST"])
 @role_required("MAID")
 def save_profile():
-    data = request.get_json()
+    data = request.get_json(silent=True)
 
-    if not data:
+    if not isinstance(data, dict) or not data:
         return jsonify({
             "success": False,
             "message": "Request body is required."
@@ -72,7 +97,6 @@ def profile_page():
 def assignment_response(assignment_id):
     """Allow the assigned maid to accept or reject an assignment."""
 
-    from app.models.assignment_response_model import respond_to_assignment
 
     data = request.get_json(silent=True)
 
@@ -122,56 +146,17 @@ def assignment_response(assignment_id):
             )
         }), 200
 
-    except Exception as error:
-        print("MAID ASSIGNMENT RESPONSE ERROR:", repr(error))
+    except Exception:
+        logging.exception("MAID ASSIGNMENT RESPONSE ERROR")
         return jsonify({
             "success": False,
             "message": "Unable to save the assignment response."
-        }), 500
-
-@maid.route("/verification/submit", methods=["POST"])
-@role_required("MAID")
-def submit_maid_verification():
-    """Allow a maid to submit a verification request."""
-
-    from app.services.verification_service import submit_verification
-
-    maid_user_id = session.get("user_id")
-
-    if maid_user_id is None:
-        return jsonify({
-            "success": False,
-            "message": "Maid session is missing. Please log in again."
-        }), 401
-
-    try:
-        success, message = submit_verification(maid_user_id)
-
-        if not success:
-            return jsonify({
-                "success": False,
-                "message": message
-            }), 400
-
-        return jsonify({
-            "success": True,
-            "message": message
-        }), 200
-
-    except Exception:
-        return jsonify({
-            "success": False,
-            "message": "Unable to submit the verification request."
         }), 500
 
 @maid.route("/services", methods=["GET"])
 @role_required("MAID")
 def get_my_services():
     """Return available services and the logged-in maid's selections."""
-    from app.models.maid_service_model import (
-        get_all_services,
-        get_maid_services
-    )
 
     maid_id = session.get("user_id")
 
@@ -193,7 +178,6 @@ def get_my_services():
 @role_required("MAID")
 def save_my_services():
     """Save service selections for the logged-in maid."""
-    from app.models.maid_service_model import save_maid_services
 
     maid_id = session.get("user_id")
     data = request.get_json(silent=True)
@@ -251,7 +235,6 @@ def my_services_page():
 @role_required("MAID")
 def get_my_availability():
     """Return availability slots for the logged-in maid."""
-    from app.models.availability_model import get_maid_availability
 
     maid_id = session.get("user_id")
 
@@ -262,7 +245,6 @@ def get_my_availability():
             "availability": slots or []
         }), 200
     except Exception:
-        import logging
         logging.exception("Failed to load maid availability")
         return jsonify({
             "success": False,
@@ -274,7 +256,6 @@ def get_my_availability():
 @role_required("MAID")
 def add_my_availability():
     """Add an availability slot for the logged-in maid."""
-    from app.models.availability_model import add_maid_availability
 
     maid_id = session.get("user_id")
     data = request.get_json(silent=True)
@@ -301,7 +282,6 @@ def add_my_availability():
         }), 400
 
     # Validate the time format before calling the model.
-    from datetime import time
 
     try:
         parsed_start = time.fromisoformat(start_time)
@@ -333,9 +313,6 @@ def add_my_availability():
 @role_required("MAID")
 def change_my_availability_status(availability_id):
     """Activate or deactivate one of the logged-in maid's slots."""
-    from app.models.availability_model import (
-        update_maid_availability_status
-    )
 
     maid_id = session.get("user_id")
     data = request.get_json(silent=True)
@@ -369,12 +346,10 @@ def my_availability_page():
     return render_template("maid/availability.html")
 
 
-
 @maid.route("/assignments", methods=["GET"])
 @role_required("MAID")
 def get_my_assignments():
     """Return assignments for the logged-in maid."""
-    from app.models.maid_assignment_model import get_maid_assignments
 
     maid_id = session.get("user_id")
 
@@ -387,7 +362,6 @@ def get_my_assignments():
         }), 200
 
     except Exception:
-        import logging
         logging.exception("Failed to load maid assignments")
 
         return jsonify({
@@ -406,9 +380,6 @@ def my_assignments_page():
 @role_required("MAID")
 def maid_active_employments_route():
     """Return active employments belonging to the logged-in maid."""
-    from app.models.maid_employment_model import (
-        get_maid_active_employments
-    )
 
     maid_id = session.get("user_id")
     employments = get_maid_active_employments(maid_id)
@@ -419,7 +390,6 @@ def maid_active_employments_route():
     }), 200
 
 
-
 @maid.route("/employments/active/page", methods=["GET"])
 @role_required("MAID")
 def maid_active_employments_page():
@@ -427,12 +397,10 @@ def maid_active_employments_page():
     return render_template("maid/active_employments.html")
 
 
-
 @maid.route("/attendance", methods=["GET"])
 @role_required("MAID")
 def maid_attendance_route():
     """Return attendance records for the logged-in maid."""
-    from app.models.attendance_model import get_maid_attendance
 
     maid_id = session.get("user_id")
     records = get_maid_attendance(maid_id)
@@ -443,24 +411,24 @@ def maid_attendance_route():
     }), 200
 
 
-
 @maid.route("/attendance/check-in", methods=["POST"])
 @role_required("MAID")
 def maid_attendance_check_in_route():
     """Record check-in for an active scheduled employment."""
-    from datetime import date
-    from flask import request
-    from app.models.attendance_model import record_check_in
 
     maid_id = session.get("user_id")
     data = request.get_json(silent=True) or {}
     employment_id = data.get("employment_id")
     attendance_date = data.get("attendance_date")
 
-    if not employment_id:
+    if (
+        isinstance(employment_id, bool)
+        or not isinstance(employment_id, int)
+        or employment_id <= 0
+    ):
         return jsonify({
             "success": False,
-            "message": "Employment ID is required.",
+            "message": "A valid employment ID is required.",
             "attendance_id": None
         }), 400
 
@@ -494,7 +462,6 @@ def maid_attendance_check_in_route():
 @role_required("MAID")
 def maid_attendance_check_out_route(attendance_id):
     """Record check-out for the maid's own attendance record."""
-    from app.models.attendance_model import record_check_out
 
     maid_id = session.get("user_id")
     success, message, saved_id = record_check_out(
@@ -509,7 +476,6 @@ def maid_attendance_check_out_route(attendance_id):
     }), 200 if success else 400
 
 
-
 @maid.route("/attendance/page", methods=["GET"])
 @role_required("MAID")
 def maid_attendance_page():
@@ -517,14 +483,10 @@ def maid_attendance_page():
     return render_template("maid/attendance.html")
 
 
-
 @maid.route("/attendance/disputes", methods=["GET"])
 @role_required("MAID")
 def maid_attendance_disputes_route():
     """Return disputes related to the logged-in maid."""
-    from app.models.maid_attendance_dispute_model import (
-        get_maid_attendance_disputes
-    )
 
     maid_id = session.get("user_id")
     disputes = get_maid_attendance_disputes(maid_id)
@@ -539,14 +501,16 @@ def maid_attendance_disputes_route():
 @role_required("MAID")
 def maid_attendance_dispute_response_route(dispute_id):
     """Submit the logged-in maid's response to an attendance dispute."""
-    from flask import request
-    from app.models.maid_attendance_dispute_model import (
-        submit_maid_dispute_response
-    )
 
     maid_id = session.get("user_id")
     data = request.get_json(silent=True) or {}
     response_text = data.get("response")
+
+    if not isinstance(response_text, str):
+        return jsonify({
+            "success": False,
+            "message": "Please enter a response."
+        }), 400
 
     success, message = submit_maid_dispute_response(
         maid_id=maid_id,
