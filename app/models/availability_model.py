@@ -103,9 +103,8 @@ def update_maid_availability_status(maid_id, availability_id, status):
     """
 
     try:
-        execute_query(query, (status, availability_id, maid_id))
-
-        # Verify that the requested slot belongs to this maid.
+        # Verify first that the slot belongs to this maid, so a missing or
+        # foreign slot is reported without attempting any update.
         check_query = """
             SELECT availability_id
             FROM maid_availability
@@ -115,6 +114,8 @@ def update_maid_availability_status(maid_id, availability_id, status):
 
         if not existing:
             return False, "Availability slot not found."
+
+        execute_query(query, (status, availability_id, maid_id))
 
         return True, "Availability status updated successfully."
     except Exception:
