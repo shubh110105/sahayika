@@ -1,7 +1,12 @@
 
 """Database operations for maid service management."""
 
-from app.database import fetch_all, execute_query
+from app.database import execute_transaction, fetch_all
+
+
+# The UI has no experience-level picker yet, so every selected service
+# is stored with this default level.
+DEFAULT_EXPERIENCE_LEVEL = "Experienced"
 
 
 def get_all_services():
@@ -33,6 +38,13 @@ def get_maid_services(maid_id):
 def save_maid_services(maid_id, selected_services):
     """Replace a maid's service selections with the submitted selections."""
 
+    # Only real integers are valid service IDs (this also rejects bools).
+    if any(
+        isinstance(service_id, bool) or not isinstance(service_id, int)
+        for service_id in selected_services
+    ):
+        return False, "One or more selected services are invalid."
+
     # Remove duplicates while preserving the submitted order.
     selected_ids = list(dict.fromkeys(selected_services))
 
@@ -51,8 +63,6 @@ def save_maid_services(maid_id, selected_services):
             return False, "One or more selected services are invalid."
 
     # Replace the service list in a transaction so a failure rolls back.
-    from app.database import execute_transaction
-
     def operation(cursor):
         cursor.execute(
             "DELETE FROM maid_services WHERE maid_id = %s",
@@ -66,7 +76,7 @@ def save_maid_services(maid_id, selected_services):
                     (maid_id, service_id, experience_level)
                 VALUES (%s, %s, %s)
                 """,
-                (maid_id, service_id, "Experienced")
+                (maid_id, service_id, DEFAULT_EXPERIENCE_LEVEL)
             )
 
         return True
