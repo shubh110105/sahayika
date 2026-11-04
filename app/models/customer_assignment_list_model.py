@@ -33,9 +33,6 @@ def get_customer_assignments(customer_id):
         JOIN household_requirements hr
             ON hr.requirement_id = ma.requirement_id
 
-        JOIN customer_profiles cp
-            ON cp.customer_id = hr.customer_id
-
         JOIN maid_profiles mp
             ON mp.maid_id = ma.maid_id
 
@@ -48,7 +45,7 @@ def get_customer_assignments(customer_id):
         LEFT JOIN services s
             ON s.service_id = rs.service_id
 
-        WHERE cp.customer_id = %s
+        WHERE hr.customer_id = %s
 
         GROUP BY
             ma.assignment_id,
