@@ -1,7 +1,7 @@
 
 """Database queries for customer attendance review."""
 
-from app.database import fetch_all
+from app.database import execute_transaction, fetch_all
 
 
 def get_customer_attendance(customer_id):
@@ -33,8 +33,6 @@ def get_customer_attendance(customer_id):
 
 def confirm_customer_attendance(customer_id, attendance_id, decision, reason=None):
     """Confirm or dispute attendance belonging to the customer's employment."""
-
-    from app.database import execute_transaction
 
     if decision not in ("CONFIRMED", "DISPUTED"):
         return False, "Invalid attendance decision."
