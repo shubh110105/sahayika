@@ -2,14 +2,11 @@
 """Database operations for Admin-controlled maid assignments."""
 
 from app.database import execute_transaction
-from app.models.matching_model import get_maid_shortlist
-
-
-BLOCKING_STATUSES = (
-    "PENDING_MAID_RESPONSE",
-    "MAID_ACCEPTED",
-    "CUSTOMER_CONFIRMED",
-    "ADMIN_CONFIRMED",
+from app.models.matching_model import (
+    BLOCKING_ASSIGNMENT_STATUSES as BLOCKING_STATUSES,
+    candidate_has_assignment_conflict,
+    get_maid_shortlist,
+    get_required_schedules,
 )
 
 
@@ -65,6 +62,24 @@ def create_maid_assignment(requirement_id, maid_id, admin_id):
         if requirement_status not in ("SUBMITTED", "UNDER_REVIEW"):
             raise ValueError(
                 "This requirement is no longer available for assignment."
+            )
+
+        # Serialize assignments per maid: take a lock on the maid's user row,
+        # then re-check for schedule clashes. Without this, two admins could
+        # book the same maid for two overlapping requirements at once (the
+        # shortlist check above is done before any lock is held).
+        cursor.execute(
+            "SELECT user_id FROM users WHERE user_id = %s FOR UPDATE",
+            (maid_id,),
+        )
+        cursor.fetchone()
+
+        if candidate_has_assignment_conflict(
+            maid_id, requirement_id, get_required_schedules(requirement_id)
+        ):
+            raise ValueError(
+                "The selected maid was just assigned to an overlapping "
+                "requirement."
             )
 
         # Prevent a second active/pending assignment for this requirement.
