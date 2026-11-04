@@ -133,24 +133,20 @@ def _candidate_supports_schedule(maid_id, required_schedules):
     return True
 
 
-def _candidate_has_assignment_conflict(maid_id, requirement_id, required_schedules):
+def candidate_has_assignment_conflict(maid_id, requirement_id, required_schedules):
     """Exclude a maid when a non-finalized assignment overlaps a requested time."""
+    placeholders = ", ".join(["%s"] * len(BLOCKING_ASSIGNMENT_STATUSES))
     rows = fetch_all(
-        """
+        f"""
         SELECT rs.day_of_week, rs.start_time, rs.end_time
         FROM maid_assignments ma
         JOIN requirement_schedules rs
           ON rs.requirement_id = ma.requirement_id
         WHERE ma.maid_id = %s
           AND ma.requirement_id <> %s
-          AND ma.status IN (
-              'PENDING_MAID_RESPONSE',
-              'MAID_ACCEPTED',
-              'CUSTOMER_CONFIRMED',
-              'ADMIN_CONFIRMED'
-          )
+          AND ma.status IN ({placeholders})
         """,
-        (maid_id, requirement_id),
+        (maid_id, requirement_id, *BLOCKING_ASSIGNMENT_STATUSES),
     )
 
     existing_by_day = {}
@@ -180,7 +176,21 @@ def _experience_requirement_years(value):
     return float(match.group(1)) if match else None
 
 
-def get_service_matched_maids(service_ids, city=None, pincode=None):
+def get_declined_maid_ids(requirement_id):
+    """Maids who rejected an assignment for this requirement."""
+    rows = fetch_all(
+        """
+        SELECT DISTINCT maid_id
+        FROM maid_assignments
+        WHERE requirement_id = %s
+          AND status = 'MAID_REJECTED'
+        """,
+        (requirement_id,),
+    )
+    return {int(row["maid_id"]) for row in rows}
+
+
+def get_service_matched_maids(service_ids):
     """
     Return active, complete, verified maids supporting every requested service.
     Availability and assignment conflicts are checked by get_maid_shortlist().
@@ -237,11 +247,10 @@ def get_maid_shortlist(requirement_id):
     if not service_ids or not schedules:
         return requirement, [], "The requirement has no saved services or schedules."
 
-    candidates = get_service_matched_maids(
-        service_ids,
-        requirement.get("city"),
-        requirement.get("pincode"),
-    )
+    candidates = get_service_matched_maids(service_ids)
+
+    # A maid who already declined this requirement is not offered it again.
+    declined_maid_ids = get_declined_maid_ids(requirement_id)
 
     minimum_experience = _experience_requirement_years(
         requirement.get("experience_requirement")
@@ -250,6 +259,8 @@ def get_maid_shortlist(requirement_id):
 
     for candidate in candidates:
         maid_id = int(candidate["maid_id"])
+        if maid_id in declined_maid_ids:
+            continue
         candidate["experience_years"] = float(candidate.get("experience_years") or 0)
         # Apply an experience threshold only when the saved value is numeric
         # or contains a numeric year value.
@@ -260,7 +271,7 @@ def get_maid_shortlist(requirement_id):
             continue
         if not _candidate_supports_schedule(maid_id, schedules):
             continue
-        if _candidate_has_assignment_conflict(maid_id, requirement_id, schedules):
+        if candidate_has_assignment_conflict(maid_id, requirement_id, schedules):
             continue
 
         same_city = bool(
