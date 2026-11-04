@@ -6,83 +6,6 @@ from app.database import (
     execute_transaction
 )
 
-def create_requirement(
-    customer_id,
-    location_address,
-    city,
-    state,
-    pincode,
-    experience_requirement,
-    additional_requirements
-):
-    query = """
-        INSERT INTO household_requirements (
-            customer_id,
-            location_address,
-            city,
-            state,
-            pincode,
-            experience_requirement,
-            additional_requirements,
-            status
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, 'DRAFT')
-    """
-
-    return execute_query(
-        query,
-        (
-            customer_id,
-            location_address,
-            city,
-            state,
-            pincode,
-            experience_requirement,
-            additional_requirements
-        )
-    )
-
-
-def add_requirement_services(requirement_id, service_ids):
-    query = """
-        INSERT INTO requirement_services (
-            requirement_id,
-            service_id
-        )
-        VALUES (%s, %s)
-    """
-
-    for service_id in service_ids:
-        execute_query(query, (requirement_id, service_id))
-
-
-def add_requirement_schedule(
-    requirement_id,
-    day_of_week,
-    start_time,
-    end_time
-):
-    query = """
-        INSERT INTO requirement_schedules (
-            requirement_id,
-            day_of_week,
-            start_time,
-            end_time
-        )
-        VALUES (%s, %s, %s, %s)
-    """
-
-    return execute_query(
-        query,
-        (
-            requirement_id,
-            day_of_week,
-            start_time,
-            end_time
-        )
-    )
-
-
 def get_requirement_by_id(requirement_id, customer_id):
     query = """
         SELECT
@@ -117,6 +40,7 @@ def get_customer_requirements(customer_id):
             pincode,
             experience_requirement,
             status,
+            estimated_monthly_salary,
             created_at
         FROM household_requirements
         WHERE customer_id = %s
@@ -136,8 +60,16 @@ def create_requirement_with_details(
     experience_requirement,
     additional_requirements,
     service_ids,
-    schedules
+    schedules,
+    estimated_salary=None
 ):
+    """
+    Create a requirement with its services and schedules in one transaction.
+
+    When estimated_salary is given, the salary estimate is saved in the same
+    transaction, so a failure can never leave a requirement without its
+    estimate.
+    """
     def operation(cursor):
         cursor.execute(
             """
@@ -196,6 +128,9 @@ def create_requirement_with_details(
                     schedule["end_time"]
                 )
             )
+
+        if estimated_salary is not None:
+            _apply_salary_estimate(cursor, requirement_id, estimated_salary)
 
         return requirement_id
 
@@ -259,67 +194,68 @@ def get_service_pricing(service_ids):
     return fetch_all(query, tuple(service_ids))
 
 
+def _apply_salary_estimate(cursor, requirement_id, estimated_salary):
+    """Save an estimate using an existing transaction cursor."""
+    cursor.execute(
+        """
+        UPDATE household_requirements
+        SET
+            estimated_monthly_salary = %s,
+            salary_estimated_at = CURRENT_TIMESTAMP,
+            status = 'SALARY_ESTIMATED',
+            salary_review_decision = 'PENDING'
+        WHERE requirement_id = %s
+          AND status IN ('DRAFT', 'SALARY_REVIEW_REQUESTED')
+        """,
+        (estimated_salary, requirement_id)
+    )
+
+    # Stop if the requirement was not eligible for an update.
+    if cursor.rowcount != 1:
+        raise ValueError(
+            "Requirement was not found or is not eligible for salary estimation."
+        )
+
+    # Mark the previous estimate as historical, not current.
+    cursor.execute(
+        """
+        UPDATE salary_estimates
+        SET is_current = FALSE
+        WHERE requirement_id = %s
+          AND is_current = TRUE
+        """,
+        (requirement_id,)
+    )
+
+    # Insert the new estimate as the current estimate.
+    cursor.execute(
+        """
+        INSERT INTO salary_estimates (
+            requirement_id,
+            estimated_amount,
+            calculation_version,
+            is_current
+        )
+        VALUES (%s, %s, %s, TRUE)
+        """,
+        (requirement_id, estimated_salary, "v1")
+    )
+
+
 def save_requirement_salary_estimate(requirement_id, estimated_salary):
-    # Update the latest salary estimate and its timestamp.
-    # The existing status rules are preserved.
-    def operation(cursor):
-        cursor.execute(
-            """
-            UPDATE household_requirements
-            SET
-                estimated_monthly_salary = %s,
-                salary_estimated_at = CURRENT_TIMESTAMP,
-                status = 'SALARY_ESTIMATED',
-                salary_review_decision = 'PENDING'
-            WHERE requirement_id = %s
-              AND status IN ('DRAFT', 'SALARY_REVIEW_REQUESTED')
-            """,
-            (estimated_salary, requirement_id)
-        )
-
-        # Stop if the requirement was not eligible for an update.
-        if cursor.rowcount != 1:
-            raise ValueError(
-                "Requirement was not found or is not eligible for salary estimation."
-            )
-
-        # Mark the previous estimate as historical, not current.
-        cursor.execute(
-            """
-            UPDATE salary_estimates
-            SET is_current = FALSE
-            WHERE requirement_id = %s
-              AND is_current = TRUE
-            """,
-            (requirement_id,)
-        )
-
-        # Insert the new estimate as the current estimate.
-        cursor.execute(
-            """
-            INSERT INTO salary_estimates (
-                requirement_id,
-                estimated_amount,
-                calculation_version,
-                is_current
-            )
-            VALUES (%s, %s, %s, TRUE)
-            """,
-            (requirement_id, estimated_salary, "v1")
-        )
-
-        # Return success; execute_transaction commits both changes together.
-        return True
-
-    # Run all database changes in one transaction to prevent partial updates.
-    return execute_transaction(operation)
-
+    """Save the latest estimate; both table changes commit together."""
+    return execute_transaction(
+        lambda cursor: _apply_salary_estimate(
+            cursor, requirement_id, estimated_salary
+        ) or True
+    )
 
 
 def request_salary_review(requirement_id, customer_id):
     query = """
         UPDATE household_requirements
-        SET status = 'SALARY_REVIEW_REQUESTED'
+        SET status = 'SALARY_REVIEW_REQUESTED',
+            salary_review_decision = 'PENDING'
         WHERE requirement_id = %s
           AND customer_id = %s
           AND status = 'SALARY_ESTIMATED'
@@ -472,17 +408,6 @@ def reset_failed_salary_reassessment(requirement_id):
     return pending_request is not None
 
 
-    # The first operation inserts the requirement.
-    # Its generated ID will be used by the service layer
-    # in a follow-up step, so we cannot yet build all
-    # dependent operations here without knowing that ID.
-    #
-    # This function will be completed in the next step
-    # after we establish how to retrieve that ID within
-    # the same transaction.
-
-
-
 def submit_requirement_for_matching(requirement_id, customer_id):
     """
     Submit a customer's salary-estimated requirement for Admin matching.
@@ -530,8 +455,4 @@ def get_submitted_requirements_for_admin():
         ORDER BY created_at ASC
     """
 
-    return fetch_all(query, ())
-"""This function:
-- Returns requirements from all customers for Admin review.
-- Includes only SUBMITTED and UNDER_REVIEW requirements.
-- Leaves existing records and customer-specific queries unchanged."""
+    return fetch_all(query)
