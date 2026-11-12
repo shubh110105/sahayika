@@ -1,7 +1,4 @@
-
 from datetime import datetime
-
-
 
 from app.models.requirement_model import (
     create_requirement_with_details,
@@ -11,9 +8,12 @@ from app.models.requirement_model import (
     get_requirement_services,   # Retrieve the requirement's saved services.
     get_requirement_schedules,  # Retrieve its saved weekly schedule.
 )
-
-
 from app.database import fetch_one
+from app.validators import (
+    MAX_EXPERIENCE_YEARS,
+    clean_text,
+    is_valid_pincode,
+)
 
 
 VALID_DAYS = {
@@ -38,13 +38,11 @@ def create_household_requirement(
     service_ids,
     schedules,
 ):
-    location_address = (location_address or "").strip()
-    city = (city or "").strip()
-    state = (state or "").strip()
-    pincode = (pincode or "").strip()
-    additional_requirements = (
-        additional_requirements or ""
-    ).strip()
+    location_address = clean_text(location_address)
+    city = clean_text(city)
+    state = clean_text(state)
+    pincode = clean_text(pincode)
+    additional_requirements = clean_text(additional_requirements)
 
     if not location_address:
         return False, "Household address is required."
@@ -58,11 +56,26 @@ def create_household_requirement(
     if not pincode:
         return False, "Pincode is required."
 
-    if not pincode.isdigit() or len(pincode) != 6:
+    if not is_valid_pincode(pincode):
         return False, "Enter a valid 6-digit pincode."
+
+    # Experience is optional; when given it must be a sensible number.
+    if experience_requirement is not None:
+        if (
+            isinstance(experience_requirement, bool)
+            or not isinstance(experience_requirement, (int, float))
+            or not 0 <= experience_requirement <= MAX_EXPERIENCE_YEARS
+        ):
+            return False, (
+                "Experience must be a number between 0 and "
+                f"{MAX_EXPERIENCE_YEARS}."
+            )
 
     if not isinstance(service_ids, list) or not service_ids:
         return False, "Select at least one service."
+
+    if any(isinstance(service_id, bool) for service_id in service_ids):
+        return False, "Invalid service selection."
 
     try:
         service_ids = [int(service_id) for service_id in service_ids]
@@ -83,7 +96,7 @@ def create_household_requirement(
         if not isinstance(schedule, dict):
             return False, "Invalid schedule format."
 
-        day = str(schedule.get("day_of_week", "")).strip().upper()
+        day = clean_text(schedule.get("day_of_week")).upper()
 
         start = schedule.get("start_time", "")
         end = schedule.get("end_time", "")
@@ -131,7 +144,7 @@ def create_household_requirement(
     
     normalized_schedules = [
         {
-            "day_of_week": str(s["day_of_week"]).strip().upper(),
+            "day_of_week": clean_text(s["day_of_week"]).upper(),
             "start_time": s["start_time"],
             "end_time": s["end_time"],
         }
@@ -147,6 +160,8 @@ def create_household_requirement(
     if not estimate_success:
         return False, estimate_result
 
+    # The requirement, its services, its schedule and its salary estimate
+    # are saved in one transaction: all of it succeeds or none of it does.
     requirement_id = create_requirement_with_details(
         customer_id=customer_id,
         location_address=location_address,
@@ -157,11 +172,7 @@ def create_household_requirement(
         additional_requirements=additional_requirements or None,
         service_ids=service_ids,
         schedules=normalized_schedules,
-    )
-
-    save_requirement_salary_estimate(
-        requirement_id,
-        estimate_result["estimated_monthly_salary"],
+        estimated_salary=estimate_result["estimated_monthly_salary"],
     )
 
     return True, requirement_id

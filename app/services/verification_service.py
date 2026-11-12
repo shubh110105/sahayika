@@ -23,12 +23,18 @@ def submit_verification(maid_user_id):
 
     latest = get_latest_verification(maid["maid_id"])
 
-    if latest and latest["status"] in ("PENDING", "VERIFIED"):
-        return False, (
-            "A pending request already exists."
-            if latest["status"] == "PENDING"
-            else "Your profile is already verified."
-        )
+    if latest and latest["status"] in ("PENDING", "VERIFIED", "SUSPENDED"):
+        messages = {
+            "PENDING": "A pending request already exists.",
+            "VERIFIED": "Your profile is already verified.",
+            # A suspended maid must not be able to lift the suspension by
+            # simply submitting a new request.
+            "SUSPENDED": (
+                "Your verification is suspended. Please contact the "
+                "administrator."
+            ),
+        }
+        return False, messages[latest["status"]]
 
     create_verification(maid["maid_id"])
 
@@ -45,8 +51,8 @@ def review_verification(
     remarks,
     admin_user_id
 ):
-    status = status.strip().upper()
-    remarks = (remarks or "").strip()
+    status = status.strip().upper() if isinstance(status, str) else ""
+    remarks = remarks.strip() if isinstance(remarks, str) else ""
 
     if status not in ALLOWED_STATUSES:
         return False, "Invalid verification status."
@@ -62,11 +68,15 @@ def review_verification(
     if status == "REJECTED" and not remarks:
         return False, "Remarks are required when rejecting a request."
 
-    update_verification(
+    updated = update_verification(
         verification_id=verification_id,
         status=status,
         remarks=remarks or None,
         admin_user_id=admin_user_id
     )
+
+    if not updated:
+        # Another admin reviewed the request between our check and update.
+        return False, "This request has already been reviewed."
 
     return True, f"Verification status updated to {status}."

@@ -3,6 +3,7 @@ from app.models.maid_model import (
     create_maid_profile,
     update_maid_profile
 )
+from app.validators import clean_text, is_valid_pincode, parse_experience_years
 
 
 def save_maid_profile(
@@ -13,10 +14,10 @@ def save_maid_profile(
     experience_years,
     bio
 ):
-    address = address.strip()
-    city = city.strip()
-    pincode = pincode.strip()
-    bio = bio.strip()
+    address = clean_text(address)
+    city = clean_text(city)
+    pincode = clean_text(pincode)
+    bio = clean_text(bio)
 
     if not address:
         return False, "Address is required."
@@ -27,13 +28,14 @@ def save_maid_profile(
     if not pincode:
         return False, "Pincode is required."
 
-    try:
-        experience_years = int(experience_years)
-    except (TypeError, ValueError):
-        return False, "Experience must be a number."
+    # Same rule as the customer profile and household requirement form.
+    if not is_valid_pincode(pincode):
+        return False, "Enter a valid 6-digit pincode."
 
-    if experience_years < 0:
-        return False, "Experience cannot be negative."
+    experience_years, error = parse_experience_years(experience_years)
+
+    if error:
+        return False, error
 
     existing_profile = get_maid_profile(user_id)
 

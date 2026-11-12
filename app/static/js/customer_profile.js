@@ -102,11 +102,11 @@ document
 
 function showMessage(message, type) {
 
-    document.getElementById("message").innerHTML = `
-        <div class="alert alert-${type}">
-            ${message}
-        </div>
-    `;
+    const alertBox = document.createElement("div");
+    alertBox.className = `alert alert-${type}`;
+    alertBox.textContent = message;
+
+    document.getElementById("message").replaceChildren(alertBox);
 }
 
 

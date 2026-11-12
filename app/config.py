@@ -13,3 +13,10 @@ class Config:
     DB_USER = os.getenv("DB_USER")
     DB_PASSWORD = os.getenv("DB_PASSWORD")
     DB_NAME = os.getenv("DB_NAME")
+
+    # One place to change the product name shown in every page.
+    APP_NAME = os.getenv("APP_NAME", "MaidMate")
+
+    # Safer session cookie defaults.
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"

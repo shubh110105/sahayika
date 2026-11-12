@@ -111,7 +111,72 @@ document
     });
 
 
+const verificationButton =
+    document.getElementById("submitVerificationButton");
+
+let currentVerificationStatus = null;
+
+// A request can only be submitted when none is pending, verified or suspended.
+function refreshVerificationButton() {
+
+    if (!verificationButton) {
+        return;
+    }
+
+    verificationButton.disabled = [
+        "PENDING",
+        "VERIFIED",
+        "SUSPENDED"
+    ].includes(currentVerificationStatus);
+}
+
+if (verificationButton) {
+    verificationButton.addEventListener("click", async function () {
+
+        verificationButton.disabled = true;
+
+        try {
+
+            const response = await fetch(
+                "/verification/submit",
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                }
+            );
+
+            const result = await response.json();
+
+            showMessage(
+                result.message,
+                result.success ? "success" : "danger"
+            );
+
+            await loadProfile();
+
+        } catch (error) {
+
+            console.error(error);
+
+            showMessage(
+                "Unable to submit the verification request.",
+                "danger"
+            );
+
+        } finally {
+
+            refreshVerificationButton();
+        }
+    });
+}
+
+
 function updateVerificationStatus(status) {
+
+    currentVerificationStatus = status;
+    refreshVerificationButton();
 
     const element =
         document.getElementById("verificationStatus");
@@ -143,11 +208,11 @@ function updateVerificationStatus(status) {
 
 function showMessage(message, type) {
 
-    document.getElementById("message").innerHTML = `
-        <div class="alert alert-${type}">
-            ${message}
-        </div>
-    `;
+    const alertBox = document.createElement("div");
+    alertBox.className = `alert alert-${type}`;
+    alertBox.textContent = message;
+
+    document.getElementById("message").replaceChildren(alertBox);
 }
 
 

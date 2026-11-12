@@ -52,6 +52,27 @@ def execute_query(query, params=None):
         connection.close()
 
 
+def execute_update(query, params=None):
+    """
+    Run an UPDATE/DELETE and return the number of rows it affected.
+
+    Use this (not execute_query) when the caller needs to know whether the
+    statement actually changed a row, e.g. a "WHERE status = 'PENDING'" guard.
+    """
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    try:
+        cursor.execute(query, params or ())
+        connection.commit()
+        return cursor.rowcount
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.close()
+        connection.close()
+
 
 def execute_transaction(callback):
     """

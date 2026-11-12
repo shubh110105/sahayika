@@ -25,30 +25,33 @@ document
 
             const result = await response.json();
 
-            if (result.success) {
-                message.innerHTML = `
-                    <div class="alert alert-success">
-                        ${result.message}
-                    </div>
-                `;
+            showAlert(
+                message,
+                result.message || "Registration failed.",
+                result.success ? "success" : "danger"
+            );
 
+            if (result.success) {
                 document.getElementById("registerForm").reset();
-            } else {
-                message.innerHTML = `
-                    <div class="alert alert-danger">
-                        ${result.message}
-                    </div>
-                `;
             }
 
         } catch (error) {
 
-            message.innerHTML = `
-                <div class="alert alert-danger">
-                    Something went wrong. Please try again.
-                </div>
-            `;
+            showAlert(
+                message,
+                "Something went wrong. Please try again.",
+                "danger"
+            );
 
             console.error(error);
         }
     });
+
+
+// Messages are inserted as text, never as HTML.
+function showAlert(container, text, type) {
+    const alertBox = document.createElement("div");
+    alertBox.className = `alert alert-${type}`;
+    alertBox.textContent = text;
+    container.replaceChildren(alertBox);
+}
