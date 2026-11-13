@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -40,6 +39,26 @@
             font-size: 12px;
             font-weight: bold;
         }
+
+        .schedule-day {
+            display: inline-block;
+            margin: 3px 5px 3px 0;
+            padding: 7px 11px;
+            border-radius: 20px;
+            background: #e9f5ee;
+            color: #146c43;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .schedule-day.today {
+            background: #198754;
+            color: #fff;
+        }
+
+        #employment-details {
+            display: none;
+        }
     </style>
 </head>
 
@@ -74,8 +93,8 @@
             <div class="card-body">
                 <h5>Record Today's Attendance</h5>
                 <p class="text-muted">
-                    Select your active employment to check in for today's
-                    scheduled work.
+                    Select an active employment to view its schedule and
+                    check whether today is a scheduled working day.
                 </p>
 
                 <label for="employment-select" class="form-label">
@@ -86,7 +105,43 @@
                     <option value="">Loading employments...</option>
                 </select>
 
-                <button id="check-in-button" class="btn btn-success">
+                <div id="employment-details" class="border rounded p-3 mb-3">
+                    <div class="row g-3 mb-3">
+                        <div class="col-12 col-md-6">
+                            <div class="detail-label">Customer</div>
+                            <div class="detail-value" id="customer-name">—</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="detail-label">Employment ID</div>
+                            <div class="detail-value" id="employment-id">—</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="detail-label">Monthly salary</div>
+                            <div class="detail-value" id="monthly-salary">—</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="detail-label">Work location</div>
+                            <div class="detail-value" id="work-location">—</div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="d-flex justify-content-between align-items-center
+                                flex-wrap gap-2 mb-2">
+                        <strong>Weekly schedule</strong>
+                        <span class="text-muted small" id="today-label"></span>
+                    </div>
+                    <div id="schedule-list" class="mb-3"></div>
+
+                    <div id="eligibility-message"
+                         class="alert alert-secondary mb-0"
+                         role="status">
+                        Select an employment to check today's schedule.
+                    </div>
+                </div>
+
+                <button id="check-in-button" class="btn btn-success" disabled>
                     Check In
                 </button>
             </div>
@@ -99,6 +154,16 @@
     <script>
         let employments = [];
         let attendanceRecords = [];
+
+        const DAY_NAMES = [
+            "SUNDAY",
+            "MONDAY",
+            "TUESDAY",
+            "WEDNESDAY",
+            "THURSDAY",
+            "FRIDAY",
+            "SATURDAY"
+        ];
 
         function escapeHTML(value) {
             return String(value ?? "").replace(/[&<>"']/g, function (char) {
@@ -149,6 +214,165 @@
             });
         }
 
+        function getLocalDateKey(date = new Date()) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            const day = String(date.getDate()).padStart(2, "0");
+            return `${year}-${month}-${day}`;
+        }
+
+        function getAttendanceDateKey(value) {
+            if (!value) return "";
+
+            // MySQL DATE values may be serialized as YYYY-MM-DD or as
+            // an RFC-style UTC date string by the API.
+            const text = String(value);
+            const isoMatch = text.match(/^(\d{4}-\d{2}-\d{2})/);
+
+            if (isoMatch) {
+                return isoMatch[1];
+            }
+
+            const parsed = new Date(value);
+
+            if (Number.isNaN(parsed.getTime())) {
+                return "";
+            }
+
+            return [
+                parsed.getUTCFullYear(),
+                String(parsed.getUTCMonth() + 1).padStart(2, "0"),
+                String(parsed.getUTCDate()).padStart(2, "0")
+            ].join("-");
+        }
+
+        function formatTime(value) {
+            if (!value) return "—";
+
+            const parts = String(value).split(":");
+            if (parts.length < 2) return escapeHTML(value);
+
+            const hours = Number(parts[0]);
+            const minutes = parts[1];
+
+            if (!Number.isFinite(hours)) return escapeHTML(value);
+
+            const suffix = hours >= 12 ? "PM" : "AM";
+            const displayHour = hours % 12 || 12;
+
+            return `${displayHour}:${minutes} ${suffix}`;
+        }
+
+        function showMessage(text, type = "info") {
+            const message = document.getElementById("message");
+            message.className = `alert alert-${type}`;
+            message.textContent = text;
+        }
+
+        function getSelectedEmployment() {
+            const selectedId = document.getElementById("employment-select").value;
+            return employments.find(function (item) {
+                return String(item.employment_id) === String(selectedId);
+            }) || null;
+        }
+
+        function getTodaysAttendance(employmentId) {
+            const todayKey = getLocalDateKey();
+
+            return attendanceRecords.find(function (item) {
+                return String(item.employment_id) === String(employmentId) &&
+                    getAttendanceDateKey(item.attendance_date) === todayKey;
+            }) || null;
+        }
+
+        function renderEmploymentDetails() {
+            const details = document.getElementById("employment-details");
+            const button = document.getElementById("check-in-button");
+            const employment = getSelectedEmployment();
+
+            details.style.display = employment ? "block" : "none";
+            button.disabled = true;
+
+            if (!employment) {
+                return;
+            }
+
+            document.getElementById("customer-name").textContent =
+                employment.customer_name || "—";
+            document.getElementById("employment-id").textContent =
+                `#${employment.employment_id}`;
+            document.getElementById("monthly-salary").textContent =
+                employment.monthly_salary
+                    ? `₹${employment.monthly_salary}`
+                    : "—";
+
+            const location = [
+                employment.location_address,
+                employment.city,
+                employment.state,
+                employment.pincode
+            ].filter(Boolean).join(", ");
+
+            document.getElementById("work-location").textContent =
+                location || "—";
+
+            const today = new Date();
+            const todayName = DAY_NAMES[today.getDay()];
+            document.getElementById("today-label").textContent =
+                `Today: ${today.toLocaleDateString("en-IN", {
+                    weekday: "long",
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric"
+                })}`;
+
+            const scheduleList = document.getElementById("schedule-list");
+            scheduleList.replaceChildren();
+
+            const schedule = Array.isArray(employment.schedule)
+                ? employment.schedule
+                : [];
+
+            if (schedule.length === 0) {
+                scheduleList.innerHTML =
+                    '<span class="text-muted">No weekly schedule is available for this employment.</span>';
+            } else {
+                schedule.forEach(function (item) {
+                    const day = document.createElement("span");
+                    day.className = "schedule-day" +
+                        (item.day === todayName ? " today" : "");
+                    day.textContent =
+                        `${item.day}: ${formatTime(item.start_time)}–${formatTime(item.end_time)}`;
+                    scheduleList.appendChild(day);
+                });
+            }
+
+            const eligibility = document.getElementById("eligibility-message");
+            const isScheduledToday = schedule.some(function (item) {
+                return String(item.day).toUpperCase() === todayName;
+            });
+            const todaysAttendance = getTodaysAttendance(employment.employment_id);
+
+            if (!schedule.length) {
+                eligibility.className = "alert alert-warning mb-0";
+                eligibility.textContent =
+                    "Check-in is unavailable because no work schedule is configured for this employment.";
+            } else if (todaysAttendance) {
+                eligibility.className = "alert alert-info mb-0";
+                eligibility.textContent =
+                    `Attendance already exists for today. Current status: ${todaysAttendance.status || "RECORDED"}.`;
+            } else if (!isScheduledToday) {
+                eligibility.className = "alert alert-warning mb-0";
+                eligibility.textContent =
+                    "Today is not a scheduled working day for this employment. Check-in is unavailable.";
+            } else {
+                eligibility.className = "alert alert-success mb-0";
+                eligibility.textContent =
+                    "Today is a scheduled working day. You can record your check-in.";
+                button.disabled = false;
+            }
+        }
+
         async function loadEmployments() {
             const response = await fetch("/maid/employments/active");
 
@@ -170,6 +394,7 @@
             if (employments.length === 0) {
                 select.add(new Option("No active employments", ""));
                 document.getElementById("check-in-button").disabled = true;
+                document.getElementById("employment-details").style.display = "none";
                 return;
             }
 
@@ -181,6 +406,8 @@
                     item.employment_id
                 ));
             });
+
+            renderEmploymentDetails();
         }
 
         function renderAttendance() {
@@ -277,17 +504,23 @@
 
             attendanceRecords = data.attendance;
             renderAttendance();
+            renderEmploymentDetails();
         }
 
         async function checkIn() {
             const select = document.getElementById("employment-select");
             const employmentId = select.value;
-            const message = document.getElementById("message");
             const button = document.getElementById("check-in-button");
 
             if (!employmentId) {
-                message.className = "alert alert-warning";
-                message.textContent = "Please select an active employment.";
+                showMessage("Please select an active employment.", "warning");
+                return;
+            }
+
+            // Re-check the current selection before sending the request.
+            renderEmploymentDetails();
+
+            if (button.disabled) {
                 return;
             }
 
@@ -307,26 +540,23 @@
 
                 const data = await response.json();
 
-                message.className = data.success
-                    ? "alert alert-success"
-                    : "alert alert-warning";
-
-                message.textContent = data.message || "Request completed.";
+                showMessage(
+                    data.message || "Request completed.",
+                    data.success ? "success" : "warning"
+                );
 
                 if (data.success) {
                     await loadAttendance();
+                } else {
+                    renderEmploymentDetails();
                 }
             } catch (error) {
-                message.className = "alert alert-danger";
-                message.textContent = error.message;
-            } finally {
-                button.disabled = false;
+                showMessage(error.message, "danger");
+                renderEmploymentDetails();
             }
         }
 
         async function checkOut(attendanceId) {
-            const message = document.getElementById("message");
-
             if (!confirm("Record your check-out now?")) {
                 return;
             }
@@ -344,20 +574,23 @@
 
                 const data = await response.json();
 
-                message.className = data.success
-                    ? "alert alert-success"
-                    : "alert alert-warning";
-
-                message.textContent = data.message || "Request completed.";
+                showMessage(
+                    data.message || "Request completed.",
+                    data.success ? "success" : "warning"
+                );
 
                 if (data.success) {
                     await loadAttendance();
                 }
             } catch (error) {
-                message.className = "alert alert-danger";
-                message.textContent = error.message;
+                showMessage(error.message, "danger");
             }
         }
+
+        document.getElementById("employment-select").addEventListener(
+            "change",
+            renderEmploymentDetails
+        );
 
         document.getElementById("check-in-button").addEventListener(
             "click",
@@ -369,14 +602,12 @@
                 await loadEmployments();
                 await loadAttendance();
 
-                const message = document.getElementById("message");
-                message.className = "alert alert-info";
-                message.textContent =
-                    "Attendance loaded. Select an employment to check in.";
+                showMessage(
+                    "Attendance loaded. Select an employment to view its schedule and today's check-in eligibility.",
+                    "info"
+                );
             } catch (error) {
-                const message = document.getElementById("message");
-                message.className = "alert alert-danger";
-                message.textContent = error.message;
+                showMessage(error.message, "danger");
             }
         }
 
