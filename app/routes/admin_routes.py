@@ -497,6 +497,84 @@ def admin_attendance_disputes_route():
     }), 200
 
 
+
+@admin.route("/attendance/overview", methods=["GET"])
+@role_required("ADMIN")
+def admin_attendance_overview_route():
+    """Return attendance records for the Admin overview."""
+
+    from datetime import date
+    from app.models.admin_attendance_model import (
+        get_attendance_overview
+    )
+
+    # Read optional filters from query parameters.
+    attendance_date_value = request.args.get("date")
+    maid_id_value = request.args.get("maid_id")
+    customer_id_value = request.args.get("customer_id")
+    status = request.args.get("status")
+
+    # Validate the date filter.
+    if attendance_date_value:
+        try:
+            attendance_date = date.fromisoformat(attendance_date_value)
+        except (TypeError, ValueError):
+            return jsonify({
+                "success": False,
+                "message": "date must be in YYYY-MM-DD format."
+            }), 400
+    else:
+        attendance_date = None
+
+    # Validate optional user ID filters.
+    try:
+        maid_id = int(maid_id_value) if maid_id_value else None
+        customer_id = (
+            int(customer_id_value) if customer_id_value else None
+        )
+
+        if (
+            (maid_id is not None and maid_id <= 0)
+            or (customer_id is not None and customer_id <= 0)
+        ):
+            raise ValueError
+
+    except (TypeError, ValueError):
+        return jsonify({
+            "success": False,
+            "message": "Maid and customer IDs must be positive integers."
+        }), 400
+
+    try:
+        records = get_attendance_overview(
+            attendance_date=attendance_date,
+            maid_id=maid_id,
+            customer_id=customer_id,
+            status=status
+        )
+
+        return jsonify({
+            "success": True,
+            "total_records": len(records),
+            "attendance": records or []
+        }), 200
+
+    except ValueError as error:
+        return jsonify({
+            "success": False,
+            "message": str(error)
+        }), 400
+
+    except Exception:
+        import logging
+        logging.exception("Failed to load Admin attendance overview")
+
+        return jsonify({
+            "success": False,
+            "message": "Unable to load attendance records."
+        }), 500
+
+
 @admin.route("/attendance/disputes/page", methods=["GET"])
 @role_required("ADMIN")
 def admin_attendance_disputes_page():
