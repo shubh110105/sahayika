@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_name }} - Attendance Overview</title>
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+    <style>
+        .summary-card { min-height: 112px; }
+        .summary-value { font-size: 1.7rem; font-weight: 700; }
+        .table td, .table th { vertical-align: middle; }
+    </style>
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-dark bg-dark">
+    <div class="container">
+        <a class="navbar-brand" href="/admin/dashboard">{{ app_name }}</a>
+        <div class="d-flex align-items-center gap-2">
+            <a href="/admin/attendance/disputes/page" class="btn btn-outline-light btn-sm">
+                Attendance Disputes
+            </a>
+            <button type="button" class="btn btn-light btn-sm" onclick="logoutUser()">
+                Logout
+            </button>
+        </div>
+    </div>
+</nav>
+
+<main class="container py-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+        <div>
+            <h2 class="mb-1">Attendance Overview</h2>
+            <p class="text-muted mb-0">
+                Review attendance records submitted for maid employments.
+            </p>
+        </div>
+        <a href="/admin/dashboard" class="btn btn-outline-secondary">Back to Dashboard</a>
+    </div>
+
+    <div id="pageMessage" class="mb-3" role="status" aria-live="polite">
+        Loading attendance records...
+    </div>
+
+    <section class="row g-3 mb-4" aria-label="Attendance summary">
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card summary-card"><div class="card-body">
+                <div class="text-muted small">Records Shown</div>
+                <div class="summary-value" id="countTotal">—</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card summary-card border-success"><div class="card-body">
+                <div class="text-muted small">Confirmed</div>
+                <div class="summary-value text-success" id="countConfirmed">—</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card summary-card border-warning"><div class="card-body">
+                <div class="text-muted small">Pending</div>
+                <div class="summary-value text-warning" id="countPending">—</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card summary-card border-danger"><div class="card-body">
+                <div class="text-muted small">Disputed</div>
+                <div class="summary-value text-danger" id="countDisputed">—</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card summary-card border-info"><div class="card-body">
+                <div class="text-muted small">Adjusted</div>
+                <div class="summary-value text-info" id="countAdjusted">—</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-4 col-xl-2">
+            <div class="card summary-card border-secondary"><div class="card-body">
+                <div class="text-muted small">Rejected</div>
+                <div class="summary-value text-secondary" id="countRejected">—</div>
+            </div></div>
+        </div>
+    </section>
+
+    <section class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title mb-3">Filter Attendance</h5>
+            <form id="filterForm" class="row g-3">
+                <div class="col-sm-6 col-lg-3">
+                    <label for="filterDate" class="form-label">Attendance Date</label>
+                    <input type="date" id="filterDate" class="form-control">
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label for="filterMaidId" class="form-label">Maid User ID</label>
+                    <input type="number" min="1" step="1" id="filterMaidId"
+                           class="form-control" placeholder="e.g. 7">
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label for="filterCustomerId" class="form-label">Customer User ID</label>
+                    <input type="number" min="1" step="1" id="filterCustomerId"
+                           class="form-control" placeholder="e.g. 4">
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <label for="filterStatus" class="form-label">Attendance Status</label>
+                    <select id="filterStatus" class="form-select">
+                        <option value="">All statuses</option>
+                        <option value="PENDING">Pending</option>
+                        <option value="CONFIRMED">Confirmed</option>
+                        <option value="DISPUTED">Disputed</option>
+                        <option value="ADJUSTED">Adjusted</option>
+                        <option value="REJECTED">Rejected</option>
+                    </select>
+                </div>
+                <div class="col-12 d-flex flex-wrap gap-2">
+                    <button type="submit" class="btn btn-primary">Apply Filters</button>
+                    <button type="button" id="clearFilters" class="btn btn-outline-secondary">
+                        Clear Filters
+                    </button>
+                    <button type="button" id="refreshButton" class="btn btn-outline-primary">
+                        Refresh
+                    </button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                <h5 class="card-title mb-0">Attendance Records</h5>
+                <span class="text-muted small" id="recordCount">0 records</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped table-hover">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Attendance ID</th>
+                            <th>Date</th>
+                            <th>Maid</th>
+                            <th>Customer</th>
+                            <th>Employment ID</th>
+                            <th>Check In</th>
+                            <th>Check Out</th>
+                            <th>Status</th>
+                            <th>Customer Confirmation</th>
+                        </tr>
+                    </thead>
+                    <tbody id="attendanceTableBody">
+                        <tr><td colspan="9" class="text-center text-muted">
+                            Loading records...
+                        </td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-muted small mb-0">
+                This page displays recorded attendance only. It does not infer absent days
+                when no attendance record exists.
+            </p>
+        </div>
+    </section>
+</main>
+
+<script>
+const pageMessage = document.getElementById("pageMessage");
+const tableBody = document.getElementById("attendanceTableBody");
+const recordCount = document.getElementById("recordCount");
+
+function setMessage(message, type = "info") {
+    pageMessage.className = `alert alert-${type} mb-3`;
+    pageMessage.textContent = message;
+}
+
+function formatDate(value) {
+    if (!value) return "—";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "—";
+    return parsed.toLocaleDateString("en-IN", {
+        day: "2-digit", month: "short", year: "numeric", timeZone: "UTC"
+    });
+}
+
+function formatDateTime(value) {
+    if (!value) return "Not recorded";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "—";
+    return parsed.toLocaleString("en-IN", {
+        day: "2-digit", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+        hour12: true, timeZone: "UTC"
+    });
+}
+
+function statusBadge(status) {
+    const styles = {
+        PENDING: "warning text-dark",
+        CONFIRMED: "success",
+        DISPUTED: "danger",
+        ADJUSTED: "info text-dark",
+        REJECTED: "secondary"
+    };
+    const badge = document.createElement("span");
+    badge.className = `badge bg-${styles[status] || "secondary"}`;
+    badge.textContent = status || "UNKNOWN";
+    return badge;
+}
+
+function updateSummary(records) {
+    const counts = {
+        PENDING: 0, CONFIRMED: 0, DISPUTED: 0, ADJUSTED: 0, REJECTED: 0
+    };
+    records.forEach(record => {
+        if (Object.prototype.hasOwnProperty.call(counts, record.attendance_status)) {
+            counts[record.attendance_status] += 1;
+        }
+    });
+
+    document.getElementById("countTotal").textContent = records.length;
+    document.getElementById("countPending").textContent = counts.PENDING;
+    document.getElementById("countConfirmed").textContent = counts.CONFIRMED;
+    document.getElementById("countDisputed").textContent = counts.DISPUTED;
+    document.getElementById("countAdjusted").textContent = counts.ADJUSTED;
+    document.getElementById("countRejected").textContent = counts.REJECTED;
+    recordCount.textContent = `${records.length} record(s)`;
+}
+
+function renderRecords(records) {
+    tableBody.replaceChildren();
+
+    if (!records.length) {
+        const row = document.createElement("tr");
+        const cell = document.createElement("td");
+        cell.colSpan = 9;
+        cell.className = "text-center text-muted py-4";
+        cell.textContent = "No attendance records match these filters.";
+        row.appendChild(cell);
+        tableBody.appendChild(row);
+        return;
+    }
+
+    records.forEach(record => {
+        const row = document.createElement("tr");
+        const values = [
+            `#${record.attendance_id}`,
+            formatDate(record.attendance_date),
+            `${record.maid_name || "—"} (ID: ${record.maid_id ?? "—"})`,
+            `${record.customer_name || "—"} (ID: ${record.customer_id ?? "—"})`,
+            record.employment_id == null ? "—" : `#${record.employment_id}`,
+            formatDateTime(record.check_in),
+            formatDateTime(record.check_out)
+        ];
+
+        values.forEach(value => {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.appendChild(cell);
+        });
+
+        const statusCell = document.createElement("td");
+        statusCell.appendChild(statusBadge(record.attendance_status));
+        row.appendChild(statusCell);
+
+        const confirmationCell = document.createElement("td");
+        confirmationCell.appendChild(statusBadge(record.customer_confirmation));
+        row.appendChild(confirmationCell);
+
+        tableBody.appendChild(row);
+    });
+}
+
+async function loadAttendance() {
+    setMessage("Loading attendance records...", "info");
+    tableBody.replaceChildren();
+
+    const params = new URLSearchParams();
+    const date = document.getElementById("filterDate").value;
+    const maidId = document.getElementById("filterMaidId").value.trim();
+    const customerId = document.getElementById("filterCustomerId").value.trim();
+    const status = document.getElementById("filterStatus").value;
+
+    if (date) params.set("date", date);
+    if (maidId) params.set("maid_id", maidId);
+    if (customerId) params.set("customer_id", customerId);
+    if (status) params.set("status", status);
+
+    const query = params.toString();
+    const url = query
+        ? `/admin/attendance/overview?${query}`
+        : "/admin/attendance/overview";
+
+    try {
+        const response = await fetch(url);
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || "Unable to load attendance records.");
+        }
+
+        const records = result.attendance || [];
+        updateSummary(records);
+        renderRecords(records);
+        setMessage(
+            `Successfully loaded ${result.total_records ?? records.length} attendance record(s).`,
+            "success"
+        );
+    } catch (error) {
+        updateSummary([]);
+        renderRecords([]);
+        setMessage(error.message || "An unexpected error occurred.", "danger");
+    }
+}
+
+document.getElementById("filterForm").addEventListener("submit", function (event) {
+    event.preventDefault();
+    loadAttendance();
+});
+
+document.getElementById("clearFilters").addEventListener("click", function () {
+    document.getElementById("filterForm").reset();
+    loadAttendance();
+});
+
+document.getElementById("refreshButton").addEventListener("click", loadAttendance);
+
+document.addEventListener("DOMContentLoaded", loadAttendance);
+</script>
+<script src="{{ url_for('static', filename='js/logout.js') }}"></script>
+</body>
+</html>
