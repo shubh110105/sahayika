@@ -575,6 +575,12 @@ def admin_attendance_overview_route():
         }), 500
 
 
+@admin.route("/attendance/overview/page", methods=["GET"])
+@role_required("ADMIN")
+def admin_attendance_overview_page():
+    """Render the Admin Attendance Overview page."""
+    return render_template("admin/attendance_overview.html")
+
 @admin.route("/attendance/disputes/page", methods=["GET"])
 @role_required("ADMIN")
 def admin_attendance_disputes_page():
