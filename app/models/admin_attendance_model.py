@@ -5,6 +5,8 @@ from app.database import fetch_all
 
 def get_attendance_overview(
     attendance_date=None,
+    date_from=None,
+    date_to=None,
     maid_id=None,
     customer_id=None,
     status=None,
@@ -13,13 +15,25 @@ def get_attendance_overview(
     Return attendance records with maid/customer details.
 
     Optional filters:
-      - attendance_date: exact date (YYYY-MM-DD or date object)
+      - attendance_date: exact date
+      - date_from: inclusive start date
+      - date_to: inclusive end date
       - maid_id: positive maid user ID
       - customer_id: positive customer user ID
-      - status: one of the attendance table's supported statuses
+      - status: supported attendance status
 
     This function only reads data. It does not create or modify attendance.
     """
+
+    if attendance_date is not None and (
+        date_from is not None or date_to is not None
+    ):
+        raise ValueError(
+            "Use either an exact attendance date or a date range, not both."
+        )
+
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise ValueError("Start date cannot be later than end date.")
 
     query = """
         SELECT
@@ -51,6 +65,14 @@ def get_attendance_overview(
         conditions.append("a.attendance_date = %s")
         params.append(attendance_date)
 
+    if date_from is not None:
+        conditions.append("a.attendance_date >= %s")
+        params.append(date_from)
+
+    if date_to is not None:
+        conditions.append("a.attendance_date <= %s")
+        params.append(date_to)
+
     if maid_id is not None:
         conditions.append("e.maid_id = %s")
         params.append(maid_id)
@@ -67,7 +89,6 @@ def get_attendance_overview(
             "ADJUSTED",
             "REJECTED",
         }
-
         normalized_status = str(status).strip().upper()
 
         if normalized_status not in allowed_statuses:
