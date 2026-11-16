@@ -498,39 +498,76 @@ def admin_attendance_disputes_route():
 
 
 
+
 @admin.route("/attendance/overview", methods=["GET"])
 @role_required("ADMIN")
 def admin_attendance_overview_route():
     """Return attendance records for the Admin overview."""
 
     from datetime import date
+    import logging
+
     from app.models.admin_attendance_model import (
         get_attendance_overview
     )
 
-    # Read optional filters from query parameters.
     attendance_date_value = request.args.get("date")
+    date_from_value = request.args.get("date_from")
+    date_to_value = request.args.get("date_to")
     maid_id_value = request.args.get("maid_id")
     customer_id_value = request.args.get("customer_id")
     status = request.args.get("status")
 
-    # Validate the date filter.
-    if attendance_date_value:
-        try:
-            attendance_date = date.fromisoformat(attendance_date_value)
-        except (TypeError, ValueError):
-            return jsonify({
-                "success": False,
-                "message": "date must be in YYYY-MM-DD format."
-            }), 400
-    else:
-        attendance_date = None
+    # Do not allow exact-date and date-range filters together.
+    if attendance_date_value and (
+        date_from_value or date_to_value
+    ):
+        return jsonify({
+            "success": False,
+            "message": (
+                "Use either an exact date or a date range, not both."
+            )
+        }), 400
 
-    # Validate optional user ID filters.
+    # Parse date filters.
+    try:
+        attendance_date = (
+            date.fromisoformat(attendance_date_value)
+            if attendance_date_value else None
+        )
+
+        date_from = (
+            date.fromisoformat(date_from_value)
+            if date_from_value else None
+        )
+
+        date_to = (
+            date.fromisoformat(date_to_value)
+            if date_to_value else None
+        )
+
+    except (TypeError, ValueError):
+        return jsonify({
+            "success": False,
+            "message": "Dates must use YYYY-MM-DD format."
+        }), 400
+
+    if (
+        date_from is not None
+        and date_to is not None
+        and date_from > date_to
+    ):
+        return jsonify({
+            "success": False,
+            "message": "Start date cannot be later than end date."
+        }), 400
+
+    # Parse and validate user ID filters.
     try:
         maid_id = int(maid_id_value) if maid_id_value else None
         customer_id = (
-            int(customer_id_value) if customer_id_value else None
+            int(customer_id_value)
+            if customer_id_value else None
         )
 
         if (
@@ -542,12 +579,16 @@ def admin_attendance_overview_route():
     except (TypeError, ValueError):
         return jsonify({
             "success": False,
-            "message": "Maid and customer IDs must be positive integers."
+            "message": (
+                "Maid and customer IDs must be positive integers."
+            )
         }), 400
 
     try:
         records = get_attendance_overview(
             attendance_date=attendance_date,
+            date_from=date_from,
+            date_to=date_to,
             maid_id=maid_id,
             customer_id=customer_id,
             status=status
@@ -566,13 +607,15 @@ def admin_attendance_overview_route():
         }), 400
 
     except Exception:
-        import logging
-        logging.exception("Failed to load Admin attendance overview")
+        logging.exception(
+            "Failed to load Admin attendance overview"
+        )
 
         return jsonify({
             "success": False,
             "message": "Unable to load attendance records."
         }), 500
+
 
 
 @admin.route("/attendance/overview/page", methods=["GET"])
