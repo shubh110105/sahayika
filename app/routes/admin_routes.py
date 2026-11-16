@@ -624,6 +624,81 @@ def admin_attendance_overview_page():
     """Render the Admin Attendance Overview page."""
     return render_template("admin/attendance_overview.html")
 
+
+@admin.route("/attendance/monthly-report", methods=["GET"])
+@role_required("ADMIN")
+def admin_monthly_attendance_report_route():
+    """Return daily attendance statistics for a selected month."""
+
+    import logging
+    from app.models.admin_attendance_report_model import (
+        get_monthly_attendance_report
+    )
+
+    year_value = request.args.get("year")
+    month_value = request.args.get("month")
+
+    if not year_value or not month_value:
+        return jsonify({
+            "success": False,
+            "message": "Both year and month are required."
+        }), 400
+
+    try:
+        year = int(year_value)
+        month = int(month_value)
+
+        daily_report = get_monthly_attendance_report(
+            year=year,
+            month=month
+        )
+
+        totals = {
+                "total_records": sum(
+                    int(row["total_records"]) for row in daily_report
+                ),
+                "confirmed": sum(
+                    int(row["confirmed_count"]) for row in daily_report
+                ),
+                "pending": sum(
+                    int(row["pending_count"]) for row in daily_report
+                ),
+                "disputed": sum(
+                    int(row["disputed_count"]) for row in daily_report
+                ),
+                "adjusted": sum(
+                    int(row["adjusted_count"]) for row in daily_report
+                ),
+                "rejected": sum(
+                    int(row["rejected_count"]) for row in daily_report
+                )
+            }
+
+        return jsonify({
+            "success": True,
+            "year": year,
+            "month": month,
+            "totals": totals,
+            "daily_report": daily_report or []
+        }), 200
+
+    except (TypeError, ValueError) as error:
+        return jsonify({
+            "success": False,
+            "message": str(error)
+        }), 400
+
+    except Exception:
+        logging.exception(
+            "Failed to generate monthly attendance report"
+        )
+
+        return jsonify({
+            "success": False,
+            "message": "Unable to generate monthly attendance report."
+        }), 500
+
+
 @admin.route("/attendance/disputes/page", methods=["GET"])
 @role_required("ADMIN")
 def admin_attendance_disputes_page():
