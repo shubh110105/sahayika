@@ -85,13 +85,20 @@
 
     <section class="card mb-4">
         <div class="card-body">
-            <h5 class="card-title mb-3">Filter Attendance</h5>
+            <h5 class="card-title mb-1">Filter Attendance</h5>
+            <p class="text-muted small mb-3">
+                Summary cards and records below update according to the selected filters.
+            </p>
             <form id="filterForm" class="row g-3">
-                <div class="col-sm-6 col-lg-3">
-                    <label for="filterDate" class="form-label">Attendance Date</label>
-                    <input type="date" id="filterDate" class="form-control">
+                <div class="col-sm-6 col-lg-2">
+                    <label for="filterDateFrom" class="form-label">From Date</label>
+                    <input type="date" id="filterDateFrom" class="form-control">
                 </div>
-                <div class="col-sm-6 col-lg-3">
+                <div class="col-sm-6 col-lg-2">
+                    <label for="filterDateTo" class="form-label">To Date</label>
+                    <input type="date" id="filterDateTo" class="form-control">
+                </div>
+                <div class="col-sm-6 col-lg-2">
                     <label for="filterMaidId" class="form-label">Maid User ID</label>
                     <input type="number" min="1" step="1" id="filterMaidId"
                            class="form-control" placeholder="e.g. 7">
@@ -273,12 +280,21 @@ async function loadAttendance() {
     tableBody.replaceChildren();
 
     const params = new URLSearchParams();
-    const date = document.getElementById("filterDate").value;
+    const dateFrom = document.getElementById("filterDateFrom").value;
+    const dateTo = document.getElementById("filterDateTo").value;
     const maidId = document.getElementById("filterMaidId").value.trim();
     const customerId = document.getElementById("filterCustomerId").value.trim();
     const status = document.getElementById("filterStatus").value;
 
-    if (date) params.set("date", date);
+    if (dateFrom && dateTo && dateFrom > dateTo) {
+        setMessage("From Date cannot be later than To Date.", "warning");
+        updateSummary([]);
+        renderRecords([]);
+        return;
+    }
+
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
     if (maidId) params.set("maid_id", maidId);
     if (customerId) params.set("customer_id", customerId);
     if (status) params.set("status", status);
