@@ -151,6 +151,7 @@
                             <th>Check Out</th>
                             <th>Status</th>
                             <th>Customer Confirmation</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody id="attendanceTableBody">
@@ -290,6 +291,24 @@
     </section>
   </main>
 
+
+    <div class="modal fade" id="attendanceDetailsModal" tabindex="-1" aria-labelledby="attendanceDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="attendanceDetailsModalLabel">Attendance Record Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3" id="attendanceDetailsContent"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 <script>
 const pageMessage = document.getElementById("pageMessage");
 const tableBody = document.getElementById("attendanceTableBody");
@@ -334,6 +353,43 @@ function statusBadge(status) {
     return badge;
 }
 
+function showAttendanceDetails(record) {
+    const content = document.getElementById("attendanceDetailsContent");
+    content.replaceChildren();
+
+    const details = [
+        ["Attendance ID", record.attendance_id == null ? "—" : `#${record.attendance_id}`],
+        ["Attendance Date", formatDate(record.attendance_date)],
+        ["Maid", `${record.maid_name || "—"} (ID: ${record.maid_id ?? "—"})`],
+        ["Customer", `${record.customer_name || "—"} (ID: ${record.customer_id ?? "—"})`],
+        ["Employment ID", record.employment_id == null ? "—" : `#${record.employment_id}`],
+        ["Check In", formatDateTime(record.check_in)],
+        ["Check Out", formatDateTime(record.check_out)],
+        ["Attendance Status", record.attendance_status || "—"],
+        ["Customer Confirmation", record.customer_confirmation || "—"],
+        ["Record Created", formatDateTime(record.created_at)]
+    ];
+
+    details.forEach(([label, value]) => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "col-sm-6";
+        const card = document.createElement("div");
+        card.className = "border rounded p-3 h-100";
+        const title = document.createElement("div");
+        title.className = "text-muted small mb-1";
+        title.textContent = label;
+        const text = document.createElement("div");
+        text.className = "fw-semibold";
+        text.textContent = value;
+        card.append(title, text);
+        wrapper.appendChild(card);
+        content.appendChild(wrapper);
+    });
+
+    const modalElement = document.getElementById("attendanceDetailsModal");
+    bootstrap.Modal.getOrCreateInstance(modalElement).show();
+}
+
 function updateSummary(records) {
     const counts = {
         PENDING: 0, CONFIRMED: 0, DISPUTED: 0, ADJUSTED: 0, REJECTED: 0
@@ -359,7 +415,7 @@ function renderRecords(records) {
     if (!records.length) {
         const row = document.createElement("tr");
         const cell = document.createElement("td");
-        cell.colSpan = 9;
+        cell.colSpan = 10;
         cell.className = "text-center text-muted py-4";
         cell.textContent = "No attendance records match these filters.";
         row.appendChild(cell);
@@ -392,6 +448,15 @@ function renderRecords(records) {
         const confirmationCell = document.createElement("td");
         confirmationCell.appendChild(statusBadge(record.customer_confirmation));
         row.appendChild(confirmationCell);
+
+        const actionCell = document.createElement("td");
+        const viewButton = document.createElement("button");
+        viewButton.type = "button";
+        viewButton.className = "btn btn-sm btn-outline-primary";
+        viewButton.textContent = "View Details";
+        viewButton.addEventListener("click", () => showAttendanceDetails(record));
+        actionCell.appendChild(viewButton);
+        row.appendChild(actionCell);
 
         tableBody.appendChild(row);
     });
@@ -614,6 +679,7 @@ document.addEventListener("DOMContentLoaded", function () {
     loadMonthlyAttendanceReport();
 });
 </script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="{{ url_for('static', filename='js/logout.js') }}"></script>
 </body>
 </html>
