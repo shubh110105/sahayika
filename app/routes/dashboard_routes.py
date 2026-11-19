@@ -20,5 +20,12 @@ def maid_dashboard():
 @dashboard.route("/admin/dashboard")
 @role_required("ADMIN")
 def admin_dashboard():
-    return render_template("admin/dashboard.html")
+    from app.models.admin_dashboard_model import get_admin_dashboard_stats
+
+    stats = get_admin_dashboard_stats()
+
+    return render_template(
+        "admin/dashboard.html",
+        stats=stats
+    )
 
