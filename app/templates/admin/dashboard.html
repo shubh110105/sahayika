@@ -34,8 +34,177 @@
         Manage verification, requirements, assignments,
         attendance disputes and payroll.
     </p>
+    <!-- Admin Dashboard Statistics -->
+<div class="row g-3 mt-4 mb-4">
 
-    <div class="row mt-4">
+    <!-- Customers -->
+    <div class="col-md-4 col-sm-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1">Total Customers</p>
+                <h2 class="fw-bold">{{ stats.total_customers|default(0) }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Maids -->
+    <div class="col-md-4 col-sm-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1">Total Maids</p>
+                <h2 class="fw-bold">{{ stats.total_maids|default(0) }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Verifications -->
+    <div class="col-md-4 col-sm-6">
+        <div class="card shadow-sm border-warning h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1">Pending Verifications</p>
+                <h2 class="fw-bold text-warning">
+                    {{ stats.pending_verifications|default(0) }}
+                </h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Requirements -->
+    <div class="col-md-4 col-sm-6">
+        <div class="card shadow-sm border-info h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1">Pending Requirements</p>
+                <h2 class="fw-bold text-info">
+                    {{ stats.pending_requirements|default(0) }}
+                </h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Employments -->
+    <div class="col-md-4 col-sm-6">
+        <div class="card shadow-sm border-success h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1">Active Employments</p>
+                <h2 class="fw-bold text-success">
+                    {{ stats.active_employments|default(0) }}
+                </h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Assignments -->
+    <div class="col-md-4 col-sm-6">
+        <div class="card shadow-sm border-primary h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1">Pending Assignments</p>
+                <h2 class="fw-bold text-primary">
+                    {{ stats.pending_assignments|default(0) }}
+                </h2>
+            </div>
+        </div>
+    </div>
+
+</div>
+<!-- Admin Action Center -->
+<div class="row mt-4 mb-4">
+    <div class="col-12">
+        <h4 class="mb-3">⚡ Admin Action Center</h4>
+    </div>
+
+    <!-- Maid Verification -->
+    <div class="col-md-6 col-lg-4 mb-3">
+        <div class="card h-100 shadow-sm border-warning">
+            <div class="card-body">
+                <h5 class="card-title">Maid Verification</h5>
+                <p class="text-muted">Review and verify new maid registrations.</p>
+                <span class="badge bg-warning text-dark">
+                    {{ stats.pending_verifications }} Pending
+                </span>
+                <div class="mt-3">
+                    <a href="/admin/verifications/page" class="btn btn-sm btn-outline-warning">
+                        Review Verifications →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Household Requirements -->
+    <div class="col-md-6 col-lg-4 mb-3">
+        <div class="card h-100 shadow-sm border-primary">
+            <div class="card-body">
+                <h5 class="card-title">Household Requirements</h5>
+                <p class="text-muted">Review customer requests and find suitable maids.</p>
+                <span class="badge bg-primary">
+                    {{ stats.pending_requirements }} Pending
+                </span>
+                <div class="mt-3">
+                    <a href="#submitted-requirements" class="btn btn-sm btn-outline-primary">
+                        View Requirements →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assignments -->
+    <div class="col-md-6 col-lg-4 mb-3">
+        <div class="card h-100 shadow-sm border-info">
+            <div class="card-body">
+                <h5 class="card-title">Assignments</h5>
+                <p class="text-muted">Manage maid assignments and confirmations.</p>
+                <span class="badge bg-info text-dark">
+                    {{ stats.pending_assignments }} Pending
+                </span>
+                <div class="mt-3">
+                    <a href="/admin/assignments/page" class="btn btn-sm btn-outline-info">
+                        Manage Assignments →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Salary Reviews -->
+    <div class="col-md-6 col-lg-4 mb-3">
+        <div class="card h-100 shadow-sm border-success">
+            <div class="card-body">
+                <h5 class="card-title">Salary Reviews</h5>
+                <p class="text-muted">Review salary change requests submitted by maids.</p>
+                <span class="badge bg-success">
+                        {{ stats.pending_salary_reviews }} Pending
+                    </span>
+                <div class="mt-3">
+                    <a href="/admin/salary-reviews/page" class="btn btn-sm btn-outline-success">
+                        Review Salaries →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attendance Disputes -->
+    <div class="col-md-6 col-lg-4 mb-3">
+        <div class="card h-100 shadow-sm border-danger">
+            <div class="card-body">
+                <h5 class="card-title">Attendance Disputes</h5>
+                <p class="text-muted">Resolve disputed attendance records.</p>
+                <span class="badge bg-danger">
+                        {{ stats.pending_attendance_disputes }} Pending
+                    </span>
+                <div class="mt-3">
+                    <a href="/admin/attendance/disputes/page" class="btn btn-sm btn-outline-danger">
+                        Resolve Disputes →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+    <div class="row mt-4" id="submitted-requirements">
         <!-- Maid Verification Card -->
         <div class="col-md-4 mb-3">
            <div class="card h-100">
