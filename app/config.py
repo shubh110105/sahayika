@@ -15,7 +15,7 @@ class Config:
     DB_NAME = os.getenv("DB_NAME")
 
     # One place to change the product name shown in every page.
-    APP_NAME = os.getenv("APP_NAME", "MaidMate")
+    APP_NAME = os.getenv("APP_NAME", "Sahayika")
 
     # Safer session cookie defaults.
     SESSION_COOKIE_HTTPONLY = True
