@@ -109,8 +109,20 @@
 <!-- Admin Action Center -->
 <div class="row mt-4 mb-4">
     <div class="col-12">
-        <h4 class="mb-3">⚡ Admin Action Center</h4>
+    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+        <h4 class="mb-0">⚡ Admin Action Center</h4>
+
+        <span class="badge bg-dark fs-6 px-3 py-2">
+            Total Pending:
+            {{
+                stats.pending_verifications
+                + stats.pending_requirements
+                + stats.pending_assignments
+                + stats.pending_attendance_disputes
+            }}
+        </span>
     </div>
+</div>
 
     <!-- Maid Verification -->
     <div class="col-md-6 col-lg-4 mb-3">
